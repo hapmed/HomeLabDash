@@ -44,6 +44,20 @@ class Settings(BaseSettings):
     internet_ipinfo_url: str = "https://ipinfo.io"
     internet_ipinfo_enabled: bool = True
 
+    # Monitor de dispositivos de la red local.
+    network_monitor_enabled: bool = True
+    network_cidr: str = "192.168.0.0/24"
+    network_scan_seconds: int = 60
+    network_probe_wait_seconds: float = 2.5
+    network_history_path: str = "/data/network-devices.json"
+    network_name: str = ""
+    network_arp_path: str = "/host/proc/1/net/arp"
+    network_gateway_ip: str = "192.168.0.1"
+    network_gateway_name: str = "Mercusys AC12"
+    network_server_ip: str = "192.168.0.14"
+    network_server_name: str = "HomeLab (servidor)"
+    network_host_sys: str = "/host/sys"
+
     @property
     def procfs(self) -> str:
         return self.host_proc if Path(self.host_proc).is_dir() else "/proc"

@@ -83,6 +83,34 @@ class FakeAgent:
                         ],
                     },
                 },
+                "devices": {
+                    "status": "ok",
+                    "summary": {
+                        "label": "En línea",
+                        "value": 7,
+                        "detail": "8 conocidos · Red local 192.168.0.0/24",
+                    },
+                    "detail": {
+                        "network_name": "Red local 192.168.0.0/24",
+                        "cidr": "192.168.0.0/24",
+                        "gateway": "192.168.0.1",
+                        "counts": {"online": 7, "total": 8},
+                        "devices": [
+                            {
+                                "mac": "46:c3:7b:e1:a6:16",
+                                "ip": "192.168.0.10",
+                                "name": "Apple",
+                                "vendor": "Apple",
+                                "online": True,
+                                "online_seconds": 3600,
+                                "first_seen": "2026-10-19T09:00:00+00:00",
+                                "last_seen": "2026-10-19T12:00:00+00:00",
+                            }
+                        ],
+                        "top_consumer": None,
+                        "consumption_available": False,
+                    },
+                },
             },
         }
 

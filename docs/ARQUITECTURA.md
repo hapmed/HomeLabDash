@@ -107,6 +107,10 @@ job periódico guarda snapshots agregados.
 - El módulo `internet` mantiene su propio hilo en el agente: conectividad cada
   minuto, IP pública cada 15 min y test de velocidad cada hora. El histórico se
   persiste en el volumen `agent-data` (`/data/internet-history.json`).
+- El módulo `devices` sondea la red con UDP y lee la tabla ARP del host
+  (`/host/proc/1/net/arp`); guarda el inventario en
+  `/data/network-devices.json`. El consumo por dispositivo necesitará la
+  integración con el router.
 
 ## Seguridad
 

@@ -12,6 +12,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, status
 from app.config import get_settings
 from app.internet import InternetMonitor
 from app.metrics import HostMetrics
+from app.network import NetworkMonitor
 
 
 @lru_cache
@@ -24,12 +25,20 @@ def get_internet_monitor() -> InternetMonitor:
     return InternetMonitor(get_settings())
 
 
+@lru_cache
+def get_network_monitor() -> NetworkMonitor:
+    return NetworkMonitor(get_settings())
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    monitor = get_internet_monitor()
-    monitor.start()
+    internet = get_internet_monitor()
+    network = get_network_monitor()
+    internet.start()
+    network.start()
     yield
-    monitor.stop()
+    network.stop()
+    internet.stop()
 
 
 def require_agent_token(
@@ -62,6 +71,7 @@ def summary(metrics: HostMetrics = Depends(get_metrics)) -> dict[str, object]:
     modules = payload.setdefault("modules", {})
     if isinstance(modules, dict):
         modules["internet"] = get_internet_monitor().payload()
+        modules["devices"] = get_network_monitor().payload()
     return payload
 
 
@@ -72,6 +82,12 @@ def module(module_id: str, metrics: HostMetrics = Depends(get_metrics)) -> dict[
             "id": "internet",
             "generated_at": datetime.now(UTC).isoformat(),
             **get_internet_monitor().payload(),
+        }
+    if module_id == "devices":
+        return {
+            "id": "devices",
+            "generated_at": datetime.now(UTC).isoformat(),
+            **get_network_monitor().payload(),
         }
     try:
         return metrics.module(module_id)

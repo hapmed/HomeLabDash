@@ -18,6 +18,7 @@ def test_modules_returns_phase_one_cards(client: TestClient, fake_agent: FakeAge
         "memory",
         "storage",
         "internet",
+        "devices",
     ]
     assert all(card["enabled"] for card in cards)
     cpu = next(card for card in cards if card["id"] == "cpu")
@@ -56,12 +57,21 @@ def test_internet_detail(client: TestClient, fake_agent: FakeAgent) -> None:
     assert body["detail"]["history"][0]["download_mbps"] == 512.3
 
 
+def test_devices_detail(client: TestClient, fake_agent: FakeAgent) -> None:
+    headers = login_headers(client)
+    response = client.get("/api/v1/modules/devices", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["detail"]["counts"]["online"] == 7
+    assert body["detail"]["devices"][0]["name"] == "Apple"
+
+
 def test_modules_degrade_when_agent_is_down(client: TestClient, down_agent: None) -> None:
     headers = login_headers(client)
     response = client.get("/api/v1/modules", headers=headers)
     assert response.status_code == 200
     cards = response.json()
-    assert len(cards) == 5
+    assert len(cards) == 6
     assert {card["status"] for card in cards} == {"unknown"}
     assert all(card["summary"]["value"] == "—" for card in cards)
 

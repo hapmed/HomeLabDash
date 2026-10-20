@@ -23,12 +23,20 @@ def test_summary_devuelve_metricas_del_host() -> None:
     response = client.get("/v1/summary", headers=AUTH)
     assert response.status_code == 200
     body = response.json()
-    assert set(body["modules"]) == {"overview", "cpu", "memory", "storage", "internet"}
+    assert set(body["modules"]) == {
+        "overview",
+        "cpu",
+        "memory",
+        "storage",
+        "internet",
+        "devices",
+    }
     assert body["modules"]["cpu"]["summary"]["unit"] == "%"
     assert body["modules"]["overview"]["detail"]["hostname"]
     assert body["modules"]["overview"]["detail"]["load"]["1m"] >= 0
-    # En tests el monitor está deshabilitado; el contrato sigue presente.
+    # En tests los monitores están deshabilitados; el contrato sigue presente.
     assert body["modules"]["internet"]["status"] == "unknown"
+    assert body["modules"]["devices"]["status"] == "unknown"
 
 
 def test_detalle_de_modulo() -> None:
@@ -44,6 +52,14 @@ def test_detalle_de_internet() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == "internet"
+    assert body["detail"]["enabled"] is False
+
+
+def test_detalle_de_dispositivos() -> None:
+    response = client.get("/v1/modules/devices", headers=AUTH)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == "devices"
     assert body["detail"]["enabled"] is False
 
 

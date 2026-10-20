@@ -31,6 +31,8 @@ idna==3.20
     # via
     #   anyio
     #   httpx
+netaddr==1.3.0
+    # via homelabdash-agent
 opentelemetry-api==1.45.1
     # via fastapi
 psutil==7.2.2

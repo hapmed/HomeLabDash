@@ -70,6 +70,37 @@
 		asNumber(detail.download_test_bytes, 0) + asNumber(detail.upload_test_bytes, 0)
 	);
 
+	const deviceList = $derived(
+		asArray(detail.devices)
+			.map(asObject)
+			.sort((left, right) => {
+				const onlineDiff = Number(right.online === true) - Number(left.online === true);
+				if (onlineDiff !== 0) return onlineDiff;
+				return asString(left.name, '').localeCompare(asString(right.name, ''), 'es');
+			})
+	);
+	const deviceCounts = $derived(asObject(detail.counts));
+	const deviceOnline = $derived(asNumber(deviceCounts.online, 0));
+	const deviceTotal = $derived(asNumber(deviceCounts.total, 0));
+	const deviceNetworkName = $derived(asString(detail.network_name, 'Red local'));
+	const deviceCidr = $derived(asString(detail.cidr));
+	const deviceGateway = $derived(asString(detail.gateway));
+	const deviceInterface = $derived(asString(detail.interface, '—'));
+	const deviceSource = $derived(asString(detail.source, 'arp'));
+	const deviceConsumptionAvailable = $derived(detail.consumption_available === true);
+	const deviceTopConsumer = $derived(asObject(detail.top_consumer));
+	const deviceTopConsumerName = $derived(asString(deviceTopConsumer.name, ''));
+	const deviceWarning = $derived(asString(detail.warning, ''));
+	const deviceLastScan = $derived(asString(detail.last_scan_at, ''));
+	const deviceScanInterval = $derived(asNumber(detail.scan_interval_seconds, 60));
+
+	function deviceTypeLabel(type: unknown): string {
+		const value = asString(type, 'device');
+		if (value === 'router') return 'Router';
+		if (value === 'server') return 'Servidor';
+		return 'Cliente';
+	}
+
 	async function refresh() {
 		if (typeof document !== 'undefined' && document.hidden) return;
 		refreshing = true;
@@ -537,6 +568,146 @@
 					</table>
 				</div>
 			{/if}
+		</div>
+	{:else if module.id === 'devices'}
+		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+			<StatTile label="En línea" value={deviceOnline} hint={`de ${deviceTotal} conocidos`} />
+			<StatTile label="Red" value={deviceNetworkName} hint={deviceCidr} />
+			<StatTile label="Gateway" value={deviceGateway} hint={deviceInterface} />
+			<StatTile
+				label="Último escaneo"
+				value={formatTime(deviceLastScan)}
+				hint={`cada ${deviceScanInterval} s`}
+			/>
+		</div>
+
+		{#if deviceWarning}
+			<div
+				role="status"
+				class="rounded-brand-lg border border-warning/30 bg-warning/10 px-4 py-3 text-[13px] text-ink"
+			>
+				{deviceWarning}
+			</div>
+		{/if}
+
+		<div class="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+			<div class="rounded-brand-lg border border-line bg-surface p-5">
+				<h2 class="text-[17px] font-semibold text-ink">Resumen de la red</h2>
+				<dl class="mt-4 grid gap-x-4 gap-y-3 text-[13px] sm:grid-cols-[150px_1fr]">
+					<dt class="text-ink-3">Nombre</dt>
+					<dd class="font-medium text-ink">{deviceNetworkName}</dd>
+					<dt class="text-ink-3">Rango</dt>
+					<dd class="font-medium text-ink">{deviceCidr}</dd>
+					<dt class="text-ink-3">Puerta de enlace</dt>
+					<dd class="font-medium text-ink">{deviceGateway}</dd>
+					<dt class="text-ink-3">Interfaz</dt>
+					<dd class="font-medium text-ink">{deviceInterface}</dd>
+					<dt class="text-ink-3">Fuente</dt>
+					<dd class="font-medium text-ink">
+						{deviceSource === 'router' ? 'Router' : 'ARP del host'}
+					</dd>
+					<dt class="text-ink-3">Consumo</dt>
+					<dd class="font-medium text-ink">
+						{deviceConsumptionAvailable ? 'Disponible' : 'No disponible'}
+					</dd>
+				</dl>
+			</div>
+
+			<div class="rounded-brand-lg border border-line bg-surface p-5">
+				<h2 class="text-[17px] font-semibold text-ink">Mayor consumo</h2>
+				{#if deviceTopConsumerName}
+					<p class="mt-4 text-[20px] font-semibold text-ink">{deviceTopConsumerName}</p>
+					<p class="mt-1 text-[13px] text-ink-2">
+						{formatBytes(asOptionalNumber(deviceTopConsumer.bytes))}
+					</p>
+				{:else}
+					<p class="mt-4 text-[13px] text-ink-2">Sin datos de consumo por dispositivo.</p>
+					<p class="mt-1 text-[12px] text-ink-3">
+						El router AC12 solo publica la velocidad instantánea de cada cliente. Para estimar
+						MB/GB/TB hace falta configurar el acceso al router y muestrear esas velocidades.
+					</p>
+				{/if}
+			</div>
+		</div>
+
+		<div class="rounded-brand-lg border border-line bg-surface p-5">
+			<div class="flex flex-wrap items-baseline justify-between gap-2">
+				<h2 class="text-[17px] font-semibold text-ink">Dispositivos</h2>
+				<span class="text-[12px] text-ink-3">
+					{deviceOnline} en línea · {deviceTotal} conocidos
+				</span>
+			</div>
+
+			{#if deviceList.length === 0}
+				<p class="mt-4 text-[13px] text-ink-3">
+					Todavía no se ha detectado ningún dispositivo. El primer escaneo tarda unos segundos.
+				</p>
+			{:else}
+				<div class="mt-4 overflow-x-auto">
+					<table class="w-full min-w-[920px] border-collapse text-[13px]">
+						<thead>
+							<tr
+								class="border-b border-line text-left text-[11px] tracking-wide text-ink-3 uppercase"
+							>
+								<th class="pb-2 pr-4 font-medium">Estado</th>
+								<th class="pb-2 pr-4 font-medium">Nombre</th>
+								<th class="pb-2 pr-4 font-medium">IP</th>
+								<th class="pb-2 pr-4 font-medium">MAC</th>
+								<th class="pb-2 pr-4 font-medium">Fabricante</th>
+								<th class="pb-2 pr-4 font-medium">Primera vez</th>
+								<th class="pb-2 pr-4 font-medium">Última vez</th>
+								<th class="pb-2 pr-4 font-medium">En línea</th>
+								<th class="pb-2 font-medium">Consumo</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each deviceList as device (device.mac)}
+								{@const isOnline = device.online === true}
+								{@const bytes =
+									asOptionalNumber(device.bytes) ?? asOptionalNumber(device.traffic_bytes)}
+								<tr class="border-b border-line/60 last:border-0">
+									<td class="py-2.5 pr-4 whitespace-nowrap">
+										<span class="inline-flex items-center gap-1.5">
+											<span
+												class="h-2 w-2 rounded-full {isOnline ? 'bg-success' : 'bg-ink-3/50'}"
+												aria-hidden="true"
+											></span>
+											<span class="text-ink-2">{isOnline ? 'En línea' : 'Ausente'}</span>
+										</span>
+									</td>
+									<td class="py-2.5 pr-4">
+										<span class="font-medium text-ink">{asString(device.name)}</span>
+										<span class="ml-1 text-[11px] text-ink-3">· {deviceTypeLabel(device.type)}</span
+										>
+									</td>
+									<td class="tabular py-2.5 pr-4 text-ink-2">{asString(device.ip)}</td>
+									<td class="py-2.5 pr-4 font-mono text-[11px] text-ink-3">
+										{asString(device.mac)}
+									</td>
+									<td class="py-2.5 pr-4 text-ink-2">{asString(device.vendor)}</td>
+									<td class="py-2.5 pr-4 text-ink-2">
+										{formatDateTime(asString(device.first_seen, ''))}
+									</td>
+									<td class="py-2.5 pr-4 text-ink-2">
+										{formatDateTime(asString(device.last_seen, ''))}
+									</td>
+									<td class="tabular py-2.5 pr-4 text-ink-2">
+										{formatUptime(asNumber(device.online_seconds, 0))}
+									</td>
+									<td class="tabular py-2.5 text-ink-2">
+										{bytes !== null ? formatBytes(bytes) : '—'}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+
+			<p class="mt-3 text-[12px] leading-5 text-ink-3">
+				Presencia obtenida de la tabla ARP del host. «Primera vez» empieza a contar desde que se
+				activó este monitor; el tiempo en línea se acumula entre escaneos.
+			</p>
 		</div>
 	{:else}
 		<div class="rounded-brand-lg border border-line bg-surface p-6">

@@ -11,6 +11,7 @@
 		HardDrive,
 		MemoryStick,
 		Network,
+		Router,
 		Server,
 		Thermometer
 	} from '@lucide/svelte';
@@ -23,6 +24,7 @@
 		globe: Globe,
 		container: Container,
 		network: Network,
+		router: Router,
 		thermometer: Thermometer,
 		server: Server,
 		cloud: Cloud,
