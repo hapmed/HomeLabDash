@@ -89,8 +89,7 @@ class FakeAgent:
                         "label": "En línea",
                         "value": 7,
                         "detail": "8 conocidos · Red local 192.168.0.0/24",
-                    },
-                    "detail": {
+                    },                    "detail": {
                         "network_name": "Red local 192.168.0.0/24",
                         "cidr": "192.168.0.0/24",
                         "gateway": "192.168.0.1",
@@ -121,6 +120,39 @@ class FakeAgent:
                         "consumption_note": "Consumo estimado por muestreo.",
                     },
                 },
+                "docker": {
+                    "status": "ok",
+                    "summary": {
+                        "label": "Contenedores",
+                        "value": "7/14",
+                        "detail": "0 con problemas · CPU 2.1% · RAM 1.2 GB",
+                    },
+                    "detail": {
+                        "containers": [
+                            {
+                                "id": "abc123",
+                                "name": "postgres",
+                                "image": "postgres:17-alpine",
+                                "state": "running",
+                                "health": "healthy",
+                                "cpu_percent": 0.3,
+                                "memory_used": 104857600,
+                                "memory_limit": 2147483648,
+                                "memory_percent": 4.9,
+                                "net_rx": 1000,
+                                "net_tx": 2000,
+                                "restart_count": 0,
+                                "uptime_seconds": 3600,
+                            }
+                        ],
+                        "system": {"containers": {"running": 7, "total": 14}},
+                        "totals": {"cpu_percent": 2.1, "memory_used": 1288490188},
+                        "top_cpu": {"name": "postgres", "cpu_percent": 0.3},
+                        "top_memory": {"name": "postgres", "memory_used": 104857600},
+                        "sampled_at": "2026-10-19T12:00:00+00:00",
+                        "error": None,
+                    },
+                },
             },
         }
 
@@ -130,6 +162,14 @@ class FakeAgent:
         if payload is None:
             raise AgentUnavailable("módulo inexistente")
         return {"generated_at": "2026-10-19T12:00:00+00:00", **payload}
+
+    def container_logs(self, container_id: str, tail: int = 100) -> dict[str, Any]:
+        return {
+            "container": container_id,
+            "id": "abc123",
+            "lines": ["2026-10-19T12:00:00Z linea 1", "2026-10-19T12:00:01Z linea 2"],
+            "tail": tail,
+        }
 
     def healthy(self) -> bool:
         return self.healthy_value

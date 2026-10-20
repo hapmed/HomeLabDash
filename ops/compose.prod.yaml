@@ -20,7 +20,10 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/host:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - agent-data:/data
+    group_add:
+      - "${DOCKER_GID:-989}"
     networks:
       - internal
       - egress

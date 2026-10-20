@@ -19,6 +19,7 @@ def test_modules_returns_phase_one_cards(client: TestClient, fake_agent: FakeAge
         "storage",
         "internet",
         "devices",
+        "docker",
     ]
     assert all(card["enabled"] for card in cards)
     cpu = next(card for card in cards if card["id"] == "cpu")
@@ -45,7 +46,7 @@ def test_module_detail_unknown(client: TestClient, fake_agent: FakeAgent) -> Non
     headers = login_headers(client)
     assert client.get("/api/v1/modules/inventado", headers=headers).status_code == 404
     # Módulo del catálogo pero aún deshabilitado (fase posterior).
-    assert client.get("/api/v1/modules/docker", headers=headers).status_code == 404
+    assert client.get("/api/v1/modules/network", headers=headers).status_code == 404
 
 
 def test_internet_detail(client: TestClient, fake_agent: FakeAgent) -> None:
@@ -68,12 +69,35 @@ def test_devices_detail(client: TestClient, fake_agent: FakeAgent) -> None:
     assert body["detail"]["top_consumer"]["name"] == "Apple"
 
 
+def test_docker_detail(client: TestClient, fake_agent: FakeAgent) -> None:
+    headers = login_headers(client)
+    response = client.get("/api/v1/modules/docker", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["detail"]["system"]["containers"]["running"] == 7
+    assert body["detail"]["containers"][0]["name"] == "postgres"
+
+
+def test_docker_logs(client: TestClient, fake_agent: FakeAgent) -> None:
+    headers = login_headers(client)
+    response = client.get(
+        "/api/v1/modules/docker/containers/postgres/logs?tail=10", headers=headers
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["container"] == "postgres"
+    assert body["tail"] == 10
+    assert len(body["lines"]) == 2
+
+    assert client.get("/api/v1/modules/docker/containers/postgres/logs").status_code == 401
+
+
 def test_modules_degrade_when_agent_is_down(client: TestClient, down_agent: None) -> None:
     headers = login_headers(client)
     response = client.get("/api/v1/modules", headers=headers)
     assert response.status_code == 200
     cards = response.json()
-    assert len(cards) == 6
+    assert len(cards) == 7
     assert {card["status"] for card in cards} == {"unknown"}
     assert all(card["summary"]["value"] == "—" for card in cards)
 

@@ -3,8 +3,8 @@
 Cada módulo es un widget del dashboard y una página de detalle en
 `/modulo/<id>`. El estado se calcula en el agente y se expone por la API.
 
-> **Estado (Fase 1):** implementados y desplegados `overview`, `cpu`, `memory`,
-> `storage`, `internet` y `devices`. El resto está en el registro con
+> **Estado:** implementados y desplegados `overview`, `cpu`, `memory`, `storage`,
+> `internet`, `devices` y `docker`. El resto está en el registro con
 > `enabled=false` hasta su fase.
 
 ## Catálogo
@@ -17,7 +17,7 @@ Cada módulo es un widget del dashboard y una página de detalle en
 | `storage` | Discos | % del disco raíz | Puntos de montaje, I/O, SMART | `df`, psutil | 2 |
 | `internet` | Internet | Bajada (Mbps) e IP pública | Histórico, subida, latencia, ISP | Cloudflare speedtest, ipinfo | 1 |
 | `devices` | Dispositivos | Dispositivos en línea | Inventario, nombres, SSID, tasas, consumo diario/mensual e histórico | ARP del host + router AC12 | 1 |
-| `docker` | Docker | Contenedores activos / total | Lista, estado, CPU/RAM, logs | Docker socket (ro) | 3 |
+| `docker` | Docker | Contenedores activos / total | Lista, estado, CPU/RAM, red, disco y logs | Docker socket (ro) | 3 (implementado) |
 | `network` | Red | Tráfico actual | Interfaces, RX/TX, errores | `/proc/net/dev` | 3 |
 | `temperature` | Temperatura | Temperatura máxima | Sensores por zona | `/sys/class/thermal` | 3 |
 | `services` | Servicios | Servicios activos | Puertos, unidades, uptime | `systemctl`, sockets | 3 |

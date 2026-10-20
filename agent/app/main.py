@@ -10,6 +10,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 
 from app.config import get_settings
+from app.docker_monitor import DockerLogsError, DockerMonitor, DockerNotFoundError
 from app.internet import InternetMonitor
 from app.metrics import HostMetrics
 from app.network import NetworkMonitor
@@ -30,13 +31,21 @@ def get_network_monitor() -> NetworkMonitor:
     return NetworkMonitor(get_settings())
 
 
+@lru_cache
+def get_docker_monitor() -> DockerMonitor:
+    return DockerMonitor(get_settings())
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     internet = get_internet_monitor()
     network = get_network_monitor()
+    docker_monitor = get_docker_monitor()
     internet.start()
     network.start()
+    docker_monitor.start()
     yield
+    docker_monitor.stop()
     network.stop()
     internet.stop()
 
@@ -72,7 +81,23 @@ def summary(metrics: HostMetrics = Depends(get_metrics)) -> dict[str, object]:
     if isinstance(modules, dict):
         modules["internet"] = get_internet_monitor().payload()
         modules["devices"] = get_network_monitor().payload()
+        modules["docker"] = get_docker_monitor().payload()
     return payload
+
+
+@app.get("/v1/docker/containers/{container_id}/logs", dependencies=[Depends(require_agent_token)])
+def docker_logs(container_id: str, tail: int = 100) -> dict[str, object]:
+    tail = max(1, min(500, tail))
+    try:
+        return get_docker_monitor().logs(container_id, tail)
+    except DockerNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="contenedor no encontrado"
+        ) from None
+    except DockerLogsError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="docker no disponible"
+        ) from None
 
 
 @app.get("/v1/modules/{module_id}", dependencies=[Depends(require_agent_token)])
@@ -88,6 +113,12 @@ def module(module_id: str, metrics: HostMetrics = Depends(get_metrics)) -> dict[
             "id": "devices",
             "generated_at": datetime.now(UTC).isoformat(),
             **get_network_monitor().payload(),
+        }
+    if module_id == "docker":
+        return {
+            "id": "docker",
+            "generated_at": datetime.now(UTC).isoformat(),
+            **get_docker_monitor().payload(),
         }
     try:
         return metrics.module(module_id)

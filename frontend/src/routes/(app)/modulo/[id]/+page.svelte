@@ -34,6 +34,11 @@
 	let module = $state(data.module);
 	let updatedAt = $state(new Date(data.updatedAt));
 	let refreshing = $state(false);
+	let logContainer = $state('');
+	let logLines = $state<string[]>([]);
+	let logLoading = $state(false);
+	let logError = $state<string | null>(null);
+	let logLoaded = $state(false);
 
 	const detail = $derived(asObject(module.detail));
 	const cores = $derived(asArray(detail.cores).map((core) => asNumber(asObject(core).percent)));
@@ -124,6 +129,61 @@
 	const dailyTopName = $derived(asString(dailyTop.name, ''));
 	const dailyTopBytes = $derived(asOptionalNumber(dailyTop.bytes));
 
+	const dockerContainers = $derived(asArray(detail.containers).map(asObject));
+	const dockerSystem = $derived(asObject(detail.system));
+	const dockerCounts = $derived(asObject(dockerSystem.containers));
+	const dockerTotals = $derived(asObject(detail.totals));
+	const dockerDisk = $derived(asObject(dockerSystem.disk));
+	const dockerTopCpu = $derived(asObject(detail.top_cpu));
+	const dockerTopMemory = $derived(asObject(detail.top_memory));
+	const dockerError = $derived(asString(detail.error, ''));
+	const dockerSampledAt = $derived(asString(detail.sampled_at, ''));
+	const dockerPoll = $derived(asNumber(detail.poll_seconds, 30));
+	const dockerRunning = $derived(asNumber(dockerCounts.running, 0));
+	const dockerTotal = $derived(asNumber(dockerCounts.total, 0));
+	const dockerStopped = $derived(
+		asNumber(dockerCounts.stopped, 0) + asNumber(dockerCounts.paused, 0)
+	);
+	const dockerCpu = $derived(asOptionalNumber(dockerTotals.cpu_percent));
+	const dockerMemory = $derived(asOptionalNumber(dockerTotals.memory_used));
+	const dockerHostMemory = $derived(asOptionalNumber(dockerSystem.memory_total));
+	const dockerCpus = $derived(asNumber(dockerSystem.cpus, 0));
+
+	function containerStateClass(state: unknown, health: unknown): string {
+		if (health === 'unhealthy' || state === 'dead' || state === 'restarting') return 'text-danger';
+		if (health === 'starting' || state === 'paused') return 'text-warning';
+		if (state === 'running') return 'text-success';
+		return 'text-ink-3';
+	}
+
+	function containerStateLabel(state: unknown, health: unknown): string {
+		if (health === 'unhealthy') return 'unhealthy';
+		if (health === 'starting') return 'starting';
+		if (state === 'running') return 'running';
+		if (state === 'exited') return 'exited';
+		if (state === 'paused') return 'paused';
+		if (state === 'restarting') return 'restarting';
+		return asString(state, '—');
+	}
+
+	async function loadLogs() {
+		if (!logContainer) {
+			logError = 'Selecciona un contenedor.';
+			return;
+		}
+		logLoading = true;
+		logError = null;
+		try {
+			const result = await api.dockerLogs(logContainer, 100);
+			logLines = result.lines;
+			logLoaded = true;
+		} catch {
+			logError = 'No se pudieron cargar los logs.';
+		} finally {
+			logLoading = false;
+		}
+	}
+
 	function deviceTypeLabel(type: unknown): string {
 		const value = asString(type, 'device');
 		if (value === 'router') return 'Router';
@@ -145,6 +205,14 @@
 	}
 
 	onMount(() => {
+		if (module.id === 'docker') {
+			const first =
+				dockerContainers.find((container) => container.state === 'running') ?? dockerContainers[0];
+			if (first) {
+				logContainer = asString(first.id);
+				void loadLogs();
+			}
+		}
 		const timer = setInterval(refresh, 5000);
 		return () => clearInterval(timer);
 	});
@@ -937,6 +1005,287 @@
 				Internet sale de los contadores WAN del router; el de dispositivos es estimado e incluye
 				tráfico LAN. El primer ciclo empieza al activar el monitor, así que puede estar incompleto.
 			</p>
+		</div>
+	{:else if module.id === 'docker'}
+		{#if dockerError}
+			<div
+				role="status"
+				class="rounded-brand-lg border border-danger/30 bg-danger/10 px-4 py-3 text-[13px] text-ink"
+			>
+				{dockerError}. Comprueba el montaje de `/var/run/docker.sock` y el GID del grupo `docker`.
+			</div>
+		{/if}
+
+		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+			<StatTile
+				label="Contenedores"
+				value={`${dockerRunning}/${dockerTotal}`}
+				hint={`${dockerStopped} detenidos`}
+			/>
+			<StatTile
+				label="CPU total"
+				value={dockerCpu !== null ? formatPercent(dockerCpu, 1) : '—'}
+				hint={`${dockerCpus} CPUs del host`}
+			/>
+			<StatTile
+				label="RAM total"
+				value={formatBytes(dockerMemory)}
+				hint={dockerHostMemory ? `de ${formatBytes(dockerHostMemory)}` : null}
+			/>
+			<StatTile
+				label="Disco Docker"
+				value={formatBytes(asOptionalNumber(dockerDisk.total))}
+				hint={`${asNumber(dockerSystem.images)} imágenes · ${asNumber(dockerSystem.volumes)} volúmenes`}
+			/>
+		</div>
+
+		<div class="grid gap-4 lg:grid-cols-2">
+			<div class="rounded-brand-lg border border-line bg-surface p-5">
+				<h2 class="text-[17px] font-semibold text-ink">Top CPU</h2>
+				{#if asString(dockerTopCpu.name, '')}
+					<p class="mt-4 text-[20px] font-semibold text-ink">
+						{asString(dockerTopCpu.name)}
+					</p>
+					<p class="mt-1 text-[13px] text-ink-2">
+						{formatPercent(asOptionalNumber(dockerTopCpu.cpu_percent), 1)} ·
+						{asString(dockerTopCpu.image)}
+					</p>
+				{:else}
+					<p class="mt-4 text-[13px] text-ink-3">Sin datos de CPU.</p>
+				{/if}
+			</div>
+
+			<div class="rounded-brand-lg border border-line bg-surface p-5">
+				<h2 class="text-[17px] font-semibold text-ink">Top RAM</h2>
+				{#if asString(dockerTopMemory.name, '')}
+					<p class="mt-4 text-[20px] font-semibold text-ink">
+						{asString(dockerTopMemory.name)}
+					</p>
+					<p class="mt-1 text-[13px] text-ink-2">
+						{formatBytes(asOptionalNumber(dockerTopMemory.memory_used))} ·
+						{asString(dockerTopMemory.image)}
+					</p>
+				{:else}
+					<p class="mt-4 text-[13px] text-ink-3">Sin datos de memoria.</p>
+				{/if}
+			</div>
+		</div>
+
+		<div class="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+			<div class="rounded-brand-lg border border-line bg-surface p-5">
+				<h2 class="text-[17px] font-semibold text-ink">Sistema Docker</h2>
+				<dl class="mt-4 grid gap-x-4 gap-y-3 text-[13px] sm:grid-cols-[150px_1fr]">
+					<dt class="text-ink-3">Versión</dt>
+					<dd class="font-medium text-ink">
+						{asString(dockerSystem.version, '—')}
+						{#if asString(dockerSystem.api_version, '')}
+							· API {asString(dockerSystem.api_version)}
+						{/if}
+					</dd>
+					<dt class="text-ink-3">SO / arquitectura</dt>
+					<dd class="font-medium text-ink">
+						{asString(dockerSystem.os, '—')} / {asString(dockerSystem.arch, '—')}
+					</dd>
+					<dt class="text-ink-3">Kernel</dt>
+					<dd class="break-all font-medium text-ink">{asString(dockerSystem.kernel)}</dd>
+					<dt class="text-ink-3">Host</dt>
+					<dd class="font-medium text-ink">{asString(dockerSystem.hostname)}</dd>
+					<dt class="text-ink-3">Host CPU / RAM</dt>
+					<dd class="font-medium text-ink">
+						{dockerCpus} CPUs · {formatBytes(dockerHostMemory)}
+					</dd>
+					<dt class="text-ink-3">Imágenes / volúmenes</dt>
+					<dd class="font-medium text-ink">
+						{asNumber(dockerSystem.images)} / {asNumber(dockerSystem.volumes)}
+					</dd>
+					<dt class="text-ink-3">Redes</dt>
+					<dd class="font-medium text-ink">{asNumber(dockerSystem.networks)}</dd>
+					<dt class="text-ink-3">Muestreo</dt>
+					<dd class="font-medium text-ink">
+						{formatDateTime(dockerSampledAt)} · cada {dockerPoll} s
+					</dd>
+				</dl>
+			</div>
+
+			<div class="rounded-brand-lg border border-line bg-surface p-5">
+				<h2 class="text-[17px] font-semibold text-ink">Uso de disco</h2>
+				<dl class="mt-4 grid gap-x-4 gap-y-3 text-[13px] sm:grid-cols-[130px_1fr]">
+					<dt class="text-ink-3">Imágenes</dt>
+					<dd class="tabular font-medium text-ink">
+						{formatBytes(asOptionalNumber(dockerDisk.images))}
+					</dd>
+					<dt class="text-ink-3">Contenedores</dt>
+					<dd class="tabular font-medium text-ink">
+						{formatBytes(asOptionalNumber(dockerDisk.containers))}
+					</dd>
+					<dt class="text-ink-3">Volúmenes</dt>
+					<dd class="tabular font-medium text-ink">
+						{formatBytes(asOptionalNumber(dockerDisk.volumes))}
+					</dd>
+					<dt class="text-ink-3">Build cache</dt>
+					<dd class="tabular font-medium text-ink">
+						{formatBytes(asOptionalNumber(dockerDisk.build_cache))}
+					</dd>
+					<dt class="text-ink-3">Total</dt>
+					<dd class="tabular font-semibold text-ink">
+						{formatBytes(asOptionalNumber(dockerDisk.total))}
+					</dd>
+				</dl>
+			</div>
+		</div>
+
+		<div class="rounded-brand-lg border border-line bg-surface p-5">
+			<div class="flex flex-wrap items-baseline justify-between gap-2">
+				<h2 class="text-[17px] font-semibold text-ink">Contenedores</h2>
+				<span class="text-[12px] text-ink-3">
+					{dockerRunning} en ejecución · {dockerTotal} total
+				</span>
+			</div>
+
+			{#if dockerContainers.length === 0}
+				<p class="mt-4 text-[13px] text-ink-3">
+					No hay datos de contenedores todavía. El monitor tarda unos segundos en la primera
+					muestra.
+				</p>
+			{:else}
+				<div class="mt-4 overflow-x-auto">
+					<table class="w-full min-w-[1250px] border-collapse text-[13px]">
+						<thead>
+							<tr
+								class="border-b border-line text-left text-[11px] tracking-wide text-ink-3 uppercase"
+							>
+								<th class="pb-2 pr-4 font-medium">Estado</th>
+								<th class="pb-2 pr-4 font-medium">Contenedor</th>
+								<th class="pb-2 pr-4 font-medium">Imagen</th>
+								<th class="pb-2 pr-4 font-medium">Uptime</th>
+								<th class="pb-2 pr-4 font-medium">CPU</th>
+								<th class="pb-2 pr-4 font-medium">RAM</th>
+								<th class="pb-2 pr-4 font-medium">Red RX / TX</th>
+								<th class="pb-2 pr-4 font-medium">Disco R / W</th>
+								<th class="pb-2 font-medium">Reinicios</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each dockerContainers as container (container.id)}
+								{@const state = container.state}
+								{@const health = container.health}
+								{@const ports = asArray(container.ports)}
+								{@const memoryUsed = asOptionalNumber(container.memory_used)}
+								{@const memoryLimit = asOptionalNumber(container.memory_limit)}
+								<tr class="border-b border-line/60 last:border-0">
+									<td class="py-2.5 pr-4 whitespace-nowrap">
+										<span class="inline-flex items-center gap-1.5">
+											<span
+												class="h-2 w-2 rounded-full {containerStateClass(state, health) ===
+												'text-success'
+													? 'bg-success'
+													: containerStateClass(state, health) === 'text-warning'
+														? 'bg-warning'
+														: containerStateClass(state, health) === 'text-danger'
+															? 'bg-danger'
+															: 'bg-ink-3/50'}"
+												aria-hidden="true"
+											></span>
+											<span class={containerStateClass(state, health)}>
+												{containerStateLabel(state, health)}
+											</span>
+										</span>
+									</td>
+									<td class="py-2.5 pr-4">
+										<span class="font-medium text-ink">{asString(container.name)}</span>
+										{#if asString(container.compose_project, '') || asString(container.compose_service, '')}
+											<span class="ml-1 text-[11px] text-ink-3">
+												· {asString(container.compose_project, '')}/{asString(
+													container.compose_service,
+													''
+												)}
+											</span>
+										{/if}
+										{#if ports.length > 0}
+											<p class="mt-0.5 text-[11px] text-ink-3" title={ports.join(', ')}>
+												{ports.slice(0, 2).join(', ')}{ports.length > 2 ? '…' : ''}
+											</p>
+										{/if}
+									</td>
+									<td
+										class="max-w-[240px] truncate py-2.5 pr-4 text-ink-2"
+										title={asString(container.image)}
+									>
+										{asString(container.image)}
+									</td>
+									<td class="py-2.5 pr-4 text-ink-2">
+										{formatUptime(asNumber(container.uptime_seconds, 0))}
+									</td>
+									<td class="tabular py-2.5 pr-4 text-ink-2">
+										{formatPercent(asOptionalNumber(container.cpu_percent), 1)}
+									</td>
+									<td class="tabular py-2.5 pr-4 text-ink-2">
+										{formatBytes(memoryUsed)}
+										<span class="text-[11px] text-ink-3">
+											/ {formatBytes(memoryLimit)} ·
+											{formatPercent(asOptionalNumber(container.memory_percent), 1)}
+										</span>
+									</td>
+									<td class="tabular py-2.5 pr-4 text-[12px] text-ink-2">
+										↑ {formatBytes(asOptionalNumber(container.net_rx))} · ↓
+										{formatBytes(asOptionalNumber(container.net_tx))}
+									</td>
+									<td class="tabular py-2.5 pr-4 text-[12px] text-ink-2">
+										R {formatBytes(asOptionalNumber(container.blk_read))} · W
+										{formatBytes(asOptionalNumber(container.blk_write))}
+									</td>
+									<td class="tabular py-2.5 text-ink-2">
+										{asNumber(container.restart_count)}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+
+			<p class="mt-3 text-[12px] leading-5 text-ink-3">
+				Monitor de solo lectura: no inicia, detiene ni modifica contenedores. CPU/RAM son la muestra
+				actual de Docker; red y disco son acumulados desde el arranque de cada contenedor.
+			</p>
+		</div>
+
+		<div class="rounded-brand-lg border border-line bg-surface p-5">
+			<div class="flex flex-wrap items-baseline justify-between gap-2">
+				<h2 class="text-[17px] font-semibold text-ink">Logs</h2>
+				<span class="text-[12px] text-ink-3">últimas 100 líneas · solo lectura</span>
+			</div>
+
+			<div class="mt-4 flex flex-wrap items-center gap-2">
+				<select
+					bind:value={logContainer}
+					class="min-h-10 rounded-[12px] border border-line bg-bg px-3 text-[13px] text-ink"
+					aria-label="Contenedor para ver logs"
+				>
+					{#each dockerContainers as container (container.id)}
+						<option value={asString(container.id)}>
+							{asString(container.name)} · {containerStateLabel(container.state, container.health)}
+						</option>
+					{/each}
+				</select>
+				<button
+					type="button"
+					class="inline-flex min-h-10 items-center rounded-[12px] border border-line bg-surface px-3.5 text-[13px] font-medium text-ink-2 transition-colors hover:text-ink disabled:opacity-60"
+					onclick={loadLogs}
+					disabled={logLoading}
+				>
+					{logLoading ? 'Cargando…' : 'Ver logs'}
+				</button>
+			</div>
+
+			{#if logError}
+				<p class="mt-3 text-[13px] text-danger">{logError}</p>
+			{/if}
+
+			<pre
+				class="mt-3 max-h-[420px] overflow-auto rounded-brand border border-line bg-surface-2/50 p-3 text-[11px] leading-5 whitespace-pre-wrap text-ink-2">{#if logLines.length > 0}{logLines.join(
+						'\n'
+					)}{:else if logLoaded}Sin líneas de log.{:else}Selecciona un contenedor y pulsa «Ver logs».{/if}</pre>
 		</div>
 	{:else}
 		<div class="rounded-brand-lg border border-line bg-surface p-6">

@@ -41,7 +41,11 @@ agent FastAPI (solo lectura)           agent:8001
 | `memory` | RAM usada (%) | RAM, swap, presión | `/proc/meminfo` |
 | `storage` | Disco raíz (%) | Montajes, I/O | `/proc/mounts` |
 | `internet` | Velocidad de bajada e IP pública | Histórico, subida, latencia, ISP | Cloudflare speedtest + ipinfo |
-| `devices` | Dispositivos en línea | Inventario, nombres, SSID, tasas, consumo estimado y top consumidor | ARP del host + router AC12 |
+| `devices` | Dispositivos en línea | Inventario, nombres, SSID, tasas, consumo diario/mensual y top consumidor | ARP del host + router AC12 |
+| `docker` | Contenedores activos / total | CPU, RAM, red, disco, sistema y logs | Docker SDK (socket ro) |
+
+El monitor de Docker usa el socket en **solo lectura** para listar contenedores y
+medir CPU, RAM, red, bloques, disco y logs; no inicia, detiene ni modifica nada.
 
 El monitor de dispositivos sondea la red local cada minuto y mantiene un
 inventario persistente con MAC, IP, fabricante, nombre, primera/última vez visto
@@ -57,9 +61,9 @@ velocidad cada hora (10 MB de bajada + 2 MB de subida, ≈ 290 MB/día). El
 histórico (168 pruebas ≈ 7 días) se guarda en el volumen `agent-data`, así que
 sobrevive a reinicios. Todo es configurable con `INTERNET_*` en `.env`.
 
-El catálogo completo (Docker, red, temperatura, servicios, Cloudflare, backups,
-alertas) está declarado con `enabled=false` y se activará en las fases 2–4 —
-ver [`docs/MODULOS.md`](./docs/MODULOS.md).
+El catálogo completo (red, temperatura, servicios, Cloudflare, backups, alertas)
+está declarado con `enabled=false` y se activará en las fases 3–4 — ver
+[`docs/MODULOS.md`](./docs/MODULOS.md).
 
 ## Estructura
 

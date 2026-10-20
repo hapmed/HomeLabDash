@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -42,6 +43,10 @@ class AgentClient:
 
     def module(self, module_id: str) -> dict[str, Any]:
         return self._get(f"/v1/modules/{module_id}")
+
+    def container_logs(self, container_id: str, tail: int = 100) -> dict[str, Any]:
+        safe_id = quote(container_id, safe="")
+        return self._get(f"/v1/docker/containers/{safe_id}/logs?tail={tail}")
 
     def healthy(self) -> bool:
         try:

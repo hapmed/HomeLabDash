@@ -121,7 +121,8 @@ job periódico guarda snapshots agregados.
 - Backend y agente publicados solo en `127.0.0.1`; el túnel llega al frontend.
 - Token interno agente ↔ backend, distinto del JWT de usuario.
 - Contraseña de administrador con hash (bcrypt/argon2), no en texto plano.
-- Socket de Docker **solo** en el agente y en modo lectura.
+- Socket de Docker **solo** en el agente, montado en `ro`; el código solo hace
+  lecturas (lista, stats, logs), nunca start/stop.
 - Contenedores sin `privileged`, procesos no root, imágenes con versión fija.
 - Secretos en `.env` fuera de Git; `ACCESOS.md` ignorado por Git.
 - Rate limit en login y auditoría de accesos.

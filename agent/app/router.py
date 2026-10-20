@@ -30,7 +30,6 @@ TYPE_LABELS = {
 class RouterError(RuntimeError):
     """Error genérico del router."""
 
-
 class RouterAuthError(RouterError):
     """El router rechazó las credenciales."""
 

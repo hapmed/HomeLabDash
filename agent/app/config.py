@@ -66,6 +66,13 @@ class Settings(BaseSettings):
     router_info_refresh_seconds: int = 300
     router_retry_seconds: int = 300
 
+    # Docker (solo lectura; socket montado en ro).
+    docker_monitor_enabled: bool = True
+    docker_socket: str = "unix:///var/run/docker.sock"
+    docker_poll_seconds: int = 30
+    docker_df_seconds: int = 120
+    docker_stats_timeout: float = 8.0
+
     # Ciclo de facturación mensual (corte el día indicado, hora local).
     billing_cycle_day: int = 10
     billing_timezone: str = "America/Monterrey"

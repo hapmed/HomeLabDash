@@ -23,6 +23,23 @@ def list_modules(
     return build_cards(summary)
 
 
+@router.get("/docker/containers/{container_id}/logs")
+def docker_container_logs(
+    container_id: str,
+    tail: int = 100,
+    agent: AgentClient = Depends(get_agent_client),
+    _user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    tail = max(1, min(500, tail))
+    try:
+        return agent.container_logs(container_id, tail)
+    except AgentUnavailable:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="no se pudieron leer los logs",
+        ) from None
+
+
 @router.get("/{module_id}", response_model=ModuleDetail)
 def module_detail(
     module_id: str,

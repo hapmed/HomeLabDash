@@ -44,5 +44,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
 	modules: () => request<ModuleCard[]>('/modules'),
 	module: (id: string) => request<ModuleDetail>(`/modules/${encodeURIComponent(id)}`),
-	alerts: () => request<AlertItem[]>('/alerts')
+	alerts: () => request<AlertItem[]>('/alerts'),
+	dockerLogs: (id: string, tail = 100) =>
+		request<{ container: string; id: string; lines: string[]; tail: number }>(
+			`/modules/docker/containers/${encodeURIComponent(id)}/logs?tail=${tail}`
+		)
 };

@@ -30,6 +30,7 @@ def test_summary_devuelve_metricas_del_host() -> None:
         "storage",
         "internet",
         "devices",
+        "docker",
     }
     assert body["modules"]["cpu"]["summary"]["unit"] == "%"
     assert body["modules"]["overview"]["detail"]["hostname"]
@@ -37,6 +38,7 @@ def test_summary_devuelve_metricas_del_host() -> None:
     # En tests los monitores están deshabilitados; el contrato sigue presente.
     assert body["modules"]["internet"]["status"] == "unknown"
     assert body["modules"]["devices"]["status"] == "unknown"
+    assert body["modules"]["docker"]["status"] == "unknown"
 
 
 def test_detalle_de_modulo() -> None:
@@ -63,5 +65,13 @@ def test_detalle_de_dispositivos() -> None:
     assert body["detail"]["enabled"] is False
 
 
+def test_detalle_de_docker() -> None:
+    response = client.get("/v1/modules/docker", headers=AUTH)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == "docker"
+    assert body["detail"]["enabled"] is False
+
+
 def test_modulo_desconocido() -> None:
-    assert client.get("/v1/modules/docker", headers=AUTH).status_code == 404
+    assert client.get("/v1/modules/inventado", headers=AUTH).status_code == 404
