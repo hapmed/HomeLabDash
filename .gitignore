@@ -1,39 +1,17 @@
-# Secretos — nunca versionar
 .env
 .env.*
 !.env.example
 ACCESOS.md
-
-# Python
 __pycache__/
 *.py[cod]
 .venv/
-.uv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-*.egg-info/
-htmlcov/
-.coverage
-
-# Node / SvelteKit
+venv/
 node_modules/
-.svelte-kit/
-build/
 dist/
-.vite/
+build/
+.svelte-kit/
 coverage/
-*.tsbuildinfo
-
-# Sistema / editores
-.DS_Store
-Thumbs.db
 *.log
+.DS_Store
 .idea/
 .vscode/
-
-# Docker local
-ops/*.local.yaml
-
-# Datos locales del host (SMART, históricos, etc.)
-/data/

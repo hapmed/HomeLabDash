@@ -11,6 +11,8 @@ Guía obligatoria para el agente que programe este proyecto.
   contenedores.
 - Los secretos están en [`ACCESOS.md`](./ACCESOS.md): úsalo, **no lo versiones**,
   no lo pegues en logs ni en el chat.
+- **GitHub:** todo se hace con la cuenta **`hapmed`** (credencial ya configurada en
+  `/root/.git-credentials`). `hector1516` es solo para consultas de lectura.
 - No inventes resultados de pruebas. Si algo no se puede ejecutar, dilo.
 
 ## 1. Qué es
@@ -78,10 +80,11 @@ Reglas:
 
 ## 4. Base de datos
 
-Decisión tomada: **usar la instancia PostgreSQL existente**, sin crear otro
-servidor de base de datos.
+Decisión tomada: **usar la instancia PostgreSQL existente del VPS**, sin crear
+otro servidor de base de datos.
 
-- Instancia: contenedor `postgres` (PostgreSQL 17), red `apps-net`.
+- Servidor: VPS `40.233.9.240` (Oracle Cloud).
+- Instancia: contenedor `postgres` (PostgreSQL 17.11), red `apps-net`.
 - Base nueva: `homelabdash`.
 - Usuario dedicado: `homelabdash_app`.
 - Credenciales de administrador y servidor: [`ACCESOS.md`](./ACCESOS.md).
@@ -301,10 +304,11 @@ ejecutó.**
 
 ## 13. Bloqueos conocidos
 
-- **Token de GitHub de `hapmed`**: no está disponible en el contenedor. No se
-  puede crear ni subir `hapmed/HomeLabDash` todavía. Trabaja local y reporta.
-- **Creación de la base**: requiere las credenciales de administrador de
-  `ACCESOS.md`. Si no hay acceso al servidor, deja la migración lista y reporta.
+- **Token de GitHub de `hapmed`**: recibido y configurado en
+  `/root/.git-credentials`. El repo `hapmed/HomeLabDash` ya existe; se puede
+  hacer push con normalidad.
+- **Creación de la base**: requiere acceso al VPS `40.233.9.240` con las
+  credenciales de `ACCESOS.md`. Si no hay acceso, deja la migración lista y reporta.
 - **DNS de Cloudflare**: pendiente de configurar `homelabdash.hapmed.qzz.io`.
 
 ## 14. Reporte al terminar
