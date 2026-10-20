@@ -111,7 +111,9 @@ job periódico guarda snapshots agregados.
   (`/host/proc/1/net/arp`); guarda el inventario en
   `/data/network-devices.json`. Con credenciales del router consulta su TDDP
   (solo lectura) para obtener SSID, nombres y tasas; el consumo se estima
-  integrando `(up + down) × intervalo` y se etiqueta como estimado.
+  integrando `(up + down) × intervalo` y se etiqueta como estimado. El total
+  de Internet usa `inOctets`/`outOctets` del WAN; el ciclo se corta el día 10
+  (zona configurable) y se archiva un histórico mensual por dispositivo.
 
 ## Seguridad
 

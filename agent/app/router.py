@@ -4,7 +4,6 @@ Solo lectura: inicia sesión, pide el bloque de dispositivos y el SSID. No
 configura nada ni guarda la clave Wi-Fi que el router incluye en su respuesta.
 """
 
-import time
 import urllib.parse
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -59,6 +58,9 @@ class RouterSnapshot:
     ssid: str | None
     model: str
     fetched_at: str
+    wan_in_bytes: int | None = None
+    wan_out_bytes: int | None = None
+    wan_uptime: int | None = None
 
 
 def security_encode(source: str, other: str, key: str) -> str:
@@ -151,6 +153,23 @@ def parse_model(text: str) -> str:
     return blocks.get(0, {}).get("scalars", {}).get("modelName", "AC12")
 
 
+def parse_wan(text: str) -> tuple[int | None, int | None, int | None]:
+    """Contadores WAN (`inOctets`, `outOctets`, `upTime`) del bloque 23/22."""
+    blocks = parse_blocks(text)
+    for block_id in (23, 22):
+        scalars = blocks.get(block_id, {}).get("scalars", {})
+        if "inOctets" in scalars and "outOctets" in scalars:
+            try:
+                return (
+                    int(scalars["inOctets"]),
+                    int(scalars["outOctets"]),
+                    int(scalars.get("upTime", "0") or 0),
+                )
+            except (TypeError, ValueError):
+                continue
+    return None, None, None
+
+
 class MercusysRouter:
     def __init__(
         self,
@@ -166,7 +185,6 @@ class MercusysRouter:
         self._session: str | None = None
         self._ssid: str | None = None
         self._model = "AC12"
-        self._info_at = 0.0
 
     def _post(self, path: str, body: bytes = b"") -> tuple[int, str]:
         try:
@@ -206,31 +224,27 @@ class MercusysRouter:
             raise RouterError("respuesta TDDP con error")
         return text
 
-    def fetch(self, force_info: bool = False) -> RouterSnapshot:
+    def fetch(self) -> RouterSnapshot:
         try:
-            devices_text = self._data(b"13")
+            text = self._data(b"13#22#23#33#53#0")
         except RouterSessionError:
             self.login()
-            devices_text = self._data(b"13")
-        devices = parse_devices(devices_text)
+            text = self._data(b"13#22#23#33#53#0")
 
-        now = time.monotonic()
-        if force_info or now - self._info_at >= self.info_refresh_seconds:
-            try:
-                info_text = self._data(b"22#23#33#53#0")
-                ssid = parse_ssid(info_text)
-                model = parse_model(info_text)
-                if ssid:
-                    self._ssid = ssid
-                if model:
-                    self._model = model
-                self._info_at = now
-            except (RouterError, RouterSessionError):
-                pass
+        ssid = parse_ssid(text)
+        model = parse_model(text)
+        wan_in, wan_out, wan_uptime = parse_wan(text)
+        if ssid:
+            self._ssid = ssid
+        if model:
+            self._model = model
 
         return RouterSnapshot(
-            devices=devices,
+            devices=parse_devices(text),
             ssid=self._ssid,
             model=self._model,
             fetched_at=datetime.now(UTC).isoformat(),
+            wan_in_bytes=wan_in,
+            wan_out_bytes=wan_out,
+            wan_uptime=wan_uptime,
         )

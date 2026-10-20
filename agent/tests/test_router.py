@@ -84,6 +84,17 @@ def test_parse_ssid_y_modelo() -> None:
     assert parse_model(info) == "AC12"
 
 
+def test_parse_wan() -> None:
+    from app.router import parse_wan
+
+    text = (
+        "00000\nid 23\nip 192.168.1.2\ninOctets 1670783140\n"
+        "outOctets 1963985017\nupTime 9332520\n"
+    )
+    assert parse_wan(text) == (1670783140, 1963985017, 9332520)
+    assert parse_wan("00000\nid 13\n") == (None, None, None)
+
+
 def test_parse_devices_rechaza_sin_autorizacion() -> None:
     import pytest
 

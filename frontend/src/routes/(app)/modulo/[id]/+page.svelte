@@ -77,7 +77,8 @@
 				const onlineDiff = Number(right.online === true) - Number(left.online === true);
 				if (onlineDiff !== 0) return onlineDiff;
 				const bytesDiff =
-					(asOptionalNumber(right.bytes) ?? 0) - (asOptionalNumber(left.bytes) ?? 0);
+					(asOptionalNumber(right.bytes_cycle) ?? asOptionalNumber(right.bytes) ?? 0) -
+					(asOptionalNumber(left.bytes_cycle) ?? asOptionalNumber(left.bytes) ?? 0);
 				if (bytesDiff !== 0) return bytesDiff;
 				return asString(left.name, '').localeCompare(asString(right.name, ''), 'es');
 			})
@@ -97,10 +98,20 @@
 	const deviceLastScan = $derived(asString(detail.last_scan_at, ''));
 	const deviceScanInterval = $derived(asNumber(detail.scan_interval_seconds, 60));
 	const deviceConsumptionNote = $derived(asString(detail.consumption_note, ''));
-	const deviceTotalBytes = $derived(
-		deviceList.reduce((total, device) => total + (asOptionalNumber(device.bytes) ?? 0), 0)
-	);
 	const deviceRouter = $derived(asObject(detail.router));
+	const billing = $derived(asObject(detail.billing));
+	const billingCurrent = $derived(asObject(billing.current));
+	const billingHistory = $derived(asArray(billing.history).map(asObject));
+	const billingCycleStart = $derived(asString(billingCurrent.cycle_start, '—'));
+	const billingCycleEnd = $derived(asString(billingCurrent.cycle_end, '—'));
+	const billingCycleDay = $derived(asNumber(billing.cycle_day, 10));
+	const billingTimezone = $derived(asString(billing.timezone, 'America/Monterrey'));
+	const billingWanBytes = $derived(asOptionalNumber(billingCurrent.wan_bytes));
+	const billingWanAvailable = $derived(billingCurrent.wan_available === true);
+	const billingDeviceBytes = $derived(asOptionalNumber(billingCurrent.device_bytes) ?? 0);
+	const billingTop = $derived(asObject(billingCurrent.top_device));
+	const billingTopName = $derived(asString(billingTop.name, ''));
+	const billingTopBytes = $derived(asOptionalNumber(billingTop.bytes));
 
 	function deviceTypeLabel(type: unknown): string {
 		const value = asString(type, 'device');
@@ -582,14 +593,14 @@
 			<StatTile label="En línea" value={deviceOnline} hint={`de ${deviceTotal} conocidos`} />
 			<StatTile label="Red" value={deviceNetworkName} hint={deviceCidr} />
 			<StatTile
-				label="Consumo total"
-				value={deviceConsumptionAvailable ? formatBytes(deviceTotalBytes) : '—'}
-				hint={deviceConsumptionAvailable ? 'estimado por muestreo' : 'sin acceso al router'}
+				label="Consumo Internet"
+				value={billingWanAvailable ? formatBytes(billingWanBytes) : formatBytes(billingDeviceBytes)}
+				hint={billingWanAvailable ? 'ciclo actual · WAN real' : 'ciclo actual · estimado'}
 			/>
 			<StatTile
-				label="Último escaneo"
-				value={formatTime(deviceLastScan)}
-				hint={`cada ${deviceScanInterval} s`}
+				label="Corte del ciclo"
+				value={billingCycleEnd}
+				hint={`día ${billingCycleDay} · ${billingTimezone}`}
 			/>
 		</div>
 
@@ -618,6 +629,18 @@
 					<dd class="font-medium text-ink">
 						{deviceSource === 'router' ? 'Router' : 'ARP del host'}
 					</dd>
+					<dt class="text-ink-3">Ciclo actual</dt>
+					<dd class="font-medium text-ink">{billingCycleStart} → {billingCycleEnd}</dd>
+					<dt class="text-ink-3">Internet (WAN)</dt>
+					<dd class="font-medium text-ink">
+						{billingWanAvailable ? formatBytes(billingWanBytes) : '—'}
+					</dd>
+					<dt class="text-ink-3">Dispositivos</dt>
+					<dd class="font-medium text-ink">{formatBytes(billingDeviceBytes)} estimados</dd>
+					<dt class="text-ink-3">Último escaneo</dt>
+					<dd class="font-medium text-ink">
+						{formatTime(deviceLastScan)} · cada {deviceScanInterval} s
+					</dd>
 					<dt class="text-ink-3">Consumo</dt>
 					<dd class="font-medium text-ink">
 						{deviceConsumptionAvailable ? 'Disponible (estimado)' : 'No disponible'}
@@ -639,14 +662,14 @@
 				{#if deviceTopConsumerName}
 					<p class="mt-4 text-[20px] font-semibold text-ink">{deviceTopConsumerName}</p>
 					<p class="mt-1 text-[13px] text-ink-2">
-						{formatBytes(asOptionalNumber(deviceTopConsumer.bytes))} estimados
+						{formatBytes(asOptionalNumber(deviceTopConsumer.bytes))} en este ciclo
 						{#if asString(deviceTopConsumer.ip, '')}· {asString(deviceTopConsumer.ip)}{/if}
 					</p>
 					{#if deviceConsumptionNote}
 						<p class="mt-2 text-[12px] text-ink-3">{deviceConsumptionNote}</p>
 					{/if}
 				{:else}
-					<p class="mt-4 text-[13px] text-ink-2">Sin datos de consumo por dispositivo.</p>
+					<p class="mt-4 text-[13px] text-ink-2">Sin datos de consumo en este ciclo.</p>
 					<p class="mt-1 text-[12px] text-ink-3">
 						El consumo se calcula muestreando las tasas que publica el router. Aún no hay
 						suficientes muestras o el router no está accesible.
@@ -669,7 +692,7 @@
 				</p>
 			{:else}
 				<div class="mt-4 overflow-x-auto">
-					<table class="w-full min-w-[1100px] border-collapse text-[13px]">
+					<table class="w-full min-w-[1200px] border-collapse text-[13px]">
 						<thead>
 							<tr
 								class="border-b border-line text-left text-[11px] tracking-wide text-ink-3 uppercase"
@@ -684,14 +707,15 @@
 								<th class="pb-2 pr-4 font-medium">Última vez</th>
 								<th class="pb-2 pr-4 font-medium">Tiempo en línea</th>
 								<th class="pb-2 pr-4 font-medium">Tasa ↑ / ↓</th>
-								<th class="pb-2 font-medium">Consumo</th>
+								<th class="pb-2 pr-4 font-medium">Consumo mes</th>
+								<th class="pb-2 font-medium">Total</th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each deviceList as device (device.mac)}
 								{@const isOnline = device.online === true}
-								{@const bytes =
-									asOptionalNumber(device.bytes) ?? asOptionalNumber(device.traffic_bytes)}
+								{@const monthBytes = asOptionalNumber(device.bytes_cycle)}
+								{@const totalBytes = asOptionalNumber(device.bytes)}
 								<tr class="border-b border-line/60 last:border-0">
 									<td class="py-2.5 pr-4 whitespace-nowrap">
 										<span class="inline-flex items-center gap-1.5">
@@ -727,8 +751,11 @@
 											asNumber(device.rate_down_bps, 0)
 										)}/s
 									</td>
-									<td class="tabular py-2.5 text-ink-2">
-										{bytes !== null ? formatBytes(bytes) : '—'}
+									<td class="tabular py-2.5 pr-4 text-ink-2">
+										{monthBytes !== null ? formatBytes(monthBytes) : '—'}
+									</td>
+									<td class="tabular py-2.5 text-ink-3">
+										{totalBytes !== null ? formatBytes(totalBytes) : '—'}
 									</td>
 								</tr>
 							{/each}
@@ -743,6 +770,75 @@
 				{#if deviceConsumptionNote}
 					{deviceConsumptionNote}
 				{/if}
+			</p>
+		</div>
+
+		<div class="rounded-brand-lg border border-line bg-surface p-5">
+			<div class="flex flex-wrap items-baseline justify-between gap-2">
+				<h2 class="text-[17px] font-semibold text-ink">Histórico mensual</h2>
+				<span class="text-[12px] text-ink-3">
+					Corte día {billingCycleDay} · {billingTimezone}
+				</span>
+			</div>
+
+			<div class="mt-4 overflow-x-auto">
+				<table class="w-full min-w-[780px] border-collapse text-[13px]">
+					<thead>
+						<tr
+							class="border-b border-line text-left text-[11px] tracking-wide text-ink-3 uppercase"
+						>
+							<th class="pb-2 pr-4 font-medium">Ciclo</th>
+							<th class="pb-2 pr-4 font-medium">Internet (WAN)</th>
+							<th class="pb-2 pr-4 font-medium">Dispositivos</th>
+							<th class="pb-2 pr-4 font-medium">Mayor consumidor</th>
+							<th class="pb-2 font-medium">Consumo</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr class="border-b border-line/60 bg-surface-2/40">
+							<td class="py-2.5 pr-4 font-medium text-ink">
+								{billingCycleStart} → {billingCycleEnd}
+								<span class="ml-1 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] text-accent">
+									En curso
+								</span>
+							</td>
+							<td class="tabular py-2.5 pr-4 text-ink-2">
+								{billingWanAvailable ? formatBytes(billingWanBytes) : '—'}
+							</td>
+							<td class="tabular py-2.5 pr-4 text-ink-2">
+								{formatBytes(billingDeviceBytes)}
+							</td>
+							<td class="py-2.5 pr-4 text-ink-2">{billingTopName || '—'}</td>
+							<td class="tabular py-2.5 text-ink-2">{formatBytes(billingTopBytes)}</td>
+						</tr>
+
+						{#each billingHistory as record (record.cycle_start)}
+							{@const historyTop = asObject(record.top_device)}
+							{@const historyWan = asOptionalNumber(record.wan_bytes) ?? 0}
+							<tr class="border-b border-line/60 last:border-0">
+								<td class="py-2.5 pr-4 font-medium text-ink">
+									{asString(record.cycle_start)} → {asString(record.cycle_end)}
+								</td>
+								<td class="tabular py-2.5 pr-4 text-ink-2">
+									{historyWan > 0 ? formatBytes(historyWan) : '—'}
+								</td>
+								<td class="tabular py-2.5 pr-4 text-ink-2">
+									{formatBytes(asOptionalNumber(record.device_bytes))}
+								</td>
+								<td class="py-2.5 pr-4 text-ink-2">{asString(historyTop.name, '—')}</td>
+								<td class="tabular py-2.5 text-ink-2">
+									{formatBytes(asOptionalNumber(historyTop.bytes))}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+
+			<p class="mt-3 text-[12px] leading-5 text-ink-3">
+				El ciclo se reinicia el día {billingCycleDay} a las 00:00 ({billingTimezone}). El consumo de
+				Internet sale de los contadores WAN del router; el de dispositivos es estimado. El primer
+				ciclo empieza al activar el monitor, así que puede estar incompleto.
 			</p>
 		</div>
 	{:else}

@@ -24,8 +24,9 @@ from typing import Any
 from netaddr import EUI
 from netaddr.core import NotRegisteredError
 
+from app.billing import counter_delta, cycle_window, get_timezone
 from app.config import Settings
-from app.router import MercusysRouter, RouterError
+from app.router import MercusysRouter, RouterError, RouterSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,7 @@ def update_registry(
                 "online_seconds": 0.0,
                 "sessions": 1 if is_online else 0,
                 "bytes": float(data.get("bytes", 0)),
+                "bytes_cycle": float(data.get("bytes_cycle", 0)),
                 "rate_up_bps": int(data.get("rate_up_bps", 0)),
                 "rate_down_bps": int(data.get("rate_down_bps", 0)),
                 "connection": data.get("connection"),
@@ -169,6 +171,7 @@ def update_registry(
         )
         for key in (
             "bytes",
+            "bytes_cycle",
             "rate_up_bps",
             "rate_down_bps",
             "connection",
@@ -231,6 +234,29 @@ class NetworkMonitor:
         self._router_error: str | None = None
         self._ssid: str | None = None
         self._router_model: str | None = None
+        self._tz = get_timezone(settings.billing_timezone)
+        self._billing: dict[str, Any] = {
+            "cycle_day": settings.billing_cycle_day,
+            "timezone": settings.billing_timezone,
+            "current": {
+                "cycle_start": None,
+                "cycle_end": None,
+                "wan_bytes": 0.0,
+                "wan_in_bytes": 0.0,
+                "wan_out_bytes": 0.0,
+                "device_bytes": 0.0,
+                "top_device": None,
+                "wan_available": False,
+            },
+            "history": [],
+        }
+        self._wan: dict[str, Any] = {
+            "in": None,
+            "out": None,
+            "uptime": None,
+            "sampled_at": None,
+            "lifetime_bytes": 0.0,
+        }
         self._load_registry()
         self._warning_logged = False
 
@@ -311,6 +337,9 @@ class NetworkMonitor:
             }
 
         now = datetime.now(UTC)
+        with self._lock:
+            self._ensure_cycle(now)
+        router_snapshot = None
         router_ok = False
         if self._router is not None and time.monotonic() >= self._router_next_attempt:
             try:
@@ -333,8 +362,11 @@ class NetworkMonitor:
                             elapsed = 0.0
                     elapsed = min(elapsed, max(1, self.settings.network_scan_seconds) * 2)
                     total_bytes = float(existing.get("bytes", 0.0))
+                    cycle_bytes = float(existing.get("bytes_cycle", 0.0))
                     if device.online:
-                        total_bytes += (device.up_bps + device.down_bps) * elapsed
+                        delta_bytes = (device.up_bps + device.down_bps) * elapsed
+                        total_bytes += delta_bytes
+                        cycle_bytes += delta_bytes
                     vendor = existing.get("vendor") or vendor_for(device.mac, self._vendor_cache)
                     is_server = device.ip == self.settings.network_server_ip
                     fallback_name = (
@@ -353,6 +385,7 @@ class NetworkMonitor:
                         "rate_up_bps": device.up_bps if device.online else 0,
                         "rate_down_bps": device.down_bps if device.online else 0,
                         "bytes": round(total_bytes, 1),
+                        "bytes_cycle": round(cycle_bytes, 1),
                         "last_router_sample_at": now.isoformat(),
                     }
             except RouterError as exc:
@@ -395,6 +428,9 @@ class NetworkMonitor:
             self._registry = update_registry(
                 self._registry, observed, now, self.settings.network_scan_seconds
             )
+            if router_snapshot is not None:
+                self._update_wan(router_snapshot, now)
+            self._finalize_billing()
             self._state["interface"] = interface
             self._state["last_scan_at"] = now.isoformat()
             self._state["scan_error"] = None
@@ -413,6 +449,120 @@ class NetworkMonitor:
             }
             registry_snapshot = copy.deepcopy(self._registry)
         self._save_registry(registry_snapshot)
+
+    # --- ciclo de facturación -------------------------------------------
+    def _ensure_cycle(self, now: datetime) -> None:
+        start, end = cycle_window(now, self.settings.billing_cycle_day, self._tz)
+        start_key = start.date().isoformat()
+        end_key = end.date().isoformat()
+        current = self._billing["current"]
+        if current.get("cycle_start") != start_key:
+            if current.get("cycle_start"):
+                self._archive_cycle(now)
+            current.update(
+                {
+                    "cycle_start": start_key,
+                    "cycle_end": end_key,
+                    "wan_bytes": 0.0,
+                    "wan_in_bytes": 0.0,
+                    "wan_out_bytes": 0.0,
+                    "device_bytes": 0.0,
+                    "top_device": None,
+                    "wan_available": False,
+                }
+            )
+            for entry in self._registry.values():
+                entry["bytes_cycle"] = 0.0
+        else:
+            current["cycle_end"] = end_key
+
+    def _archive_cycle(self, now: datetime) -> None:
+        current = self._billing["current"]
+        if not current.get("cycle_start"):
+            return
+        devices = {
+            mac: {
+                "name": entry.get("name") or "Dispositivo",
+                "bytes": float(entry.get("bytes_cycle", 0) or 0),
+            }
+            for mac, entry in self._registry.items()
+            if float(entry.get("bytes_cycle", 0) or 0) > 0
+        }
+        record = {
+            "cycle_start": current.get("cycle_start"),
+            "cycle_end": current.get("cycle_end"),
+            "wan_bytes": float(current.get("wan_bytes", 0) or 0),
+            "wan_in_bytes": float(current.get("wan_in_bytes", 0) or 0),
+            "wan_out_bytes": float(current.get("wan_out_bytes", 0) or 0),
+            "device_bytes": float(current.get("device_bytes", 0) or 0),
+            "top_device": current.get("top_device"),
+            "wan_available": bool(current.get("wan_available")),
+            "devices": devices,
+            "closed_at": _iso(now),
+        }
+        if record["wan_bytes"] or record["device_bytes"] or devices:
+            history = self._billing.setdefault("history", [])
+            history.insert(0, record)
+            self._billing["history"] = history[: max(1, self.settings.billing_history_months)]
+
+    def _update_wan(self, snapshot: RouterSnapshot, now: datetime) -> None:
+        wan_in = snapshot.wan_in_bytes
+        wan_out = snapshot.wan_out_bytes
+        wan_uptime = snapshot.wan_uptime
+        current = self._billing["current"]
+        if wan_in is None or wan_out is None:
+            current["wan_available"] = False
+            return
+
+        in_delta = counter_delta(
+            self._wan.get("in"), wan_in, self._wan.get("uptime"), wan_uptime
+        )
+        out_delta = counter_delta(
+            self._wan.get("out"), wan_out, self._wan.get("uptime"), wan_uptime
+        )
+        if self._wan.get("in") is not None and self._wan.get("out") is not None:
+            current["wan_in_bytes"] = float(current.get("wan_in_bytes", 0) or 0) + in_delta
+            current["wan_out_bytes"] = float(current.get("wan_out_bytes", 0) or 0) + out_delta
+            current["wan_bytes"] = (
+                float(current.get("wan_bytes", 0) or 0) + in_delta + out_delta
+            )
+            self._wan["lifetime_bytes"] = (
+                float(self._wan.get("lifetime_bytes", 0) or 0) + in_delta + out_delta
+            )
+
+        self._wan.update(
+            {
+                "in": wan_in,
+                "out": wan_out,
+                "uptime": wan_uptime,
+                "sampled_at": now.isoformat(),
+            }
+        )
+        current["wan_available"] = True
+
+    def _finalize_billing(self) -> None:
+        current = self._billing["current"]
+        device_bytes = 0.0
+        top_entry: dict[str, Any] | None = None
+        for entry in self._registry.values():
+            value = float(entry.get("bytes_cycle", 0) or 0)
+            device_bytes += value
+            if value > 0 and (
+                top_entry is None or value > float(top_entry.get("bytes_cycle", 0) or 0)
+            ):
+                top_entry = entry
+        current["device_bytes"] = round(device_bytes, 1)
+        current["top_device"] = (
+            {
+                "name": top_entry.get("name") or "Dispositivo",
+                "mac": top_entry.get("mac"),
+                "ip": top_entry.get("ip"),
+                "bytes": round(float(top_entry.get("bytes_cycle", 0) or 0), 1),
+            }
+            if top_entry is not None
+            else None
+        )
+        current["wan_available"] = self._wan.get("in") is not None
 
     def _server_mac(self, interface: str | None) -> str | None:
         if not interface:
@@ -434,21 +584,40 @@ class NetworkMonitor:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return
-        devices = payload.get("devices") if isinstance(payload, dict) else None
+        if not isinstance(payload, dict):
+            return
+        devices = payload.get("devices")
         if isinstance(devices, dict):
             self._registry = {
                 str(mac): entry
                 for mac, entry in devices.items()
                 if isinstance(entry, dict) and entry.get("mac")
             }
+        billing = payload.get("billing")
+        if isinstance(billing, dict):
+            current = billing.get("current")
+            if isinstance(current, dict):
+                self._billing["current"].update(current)
+            history = billing.get("history")
+            if isinstance(history, list):
+                self._billing["history"] = [
+                    record for record in history if isinstance(record, dict)
+                ][: max(1, self.settings.billing_history_months)]
+        wan = payload.get("wan")
+        if isinstance(wan, dict):
+            for key in self._wan:
+                if key in wan:
+                    self._wan[key] = wan[key]
 
     def _save_registry(self, registry: dict[str, dict[str, Any]]) -> None:
         path = Path(self.settings.network_history_path)
         payload = {
-            "version": 1,
+            "version": 2,
             "updated_at": _iso(),
             "network": self._state["network_name"],
             "devices": registry,
+            "billing": self._billing,
+            "wan": self._wan,
         }
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -472,23 +641,34 @@ class NetworkMonitor:
             devices.values(),
             key=lambda device: (
                 not bool(device.get("online")),
-                -float(device.get("bytes", 0) or 0),
+                -float(
+                    device.get("bytes_cycle", 0) or device.get("bytes", 0) or 0
+                ),
                 str(device.get("name", "")).lower(),
             ),
         )
         online = sum(1 for device in items if device.get("online"))
-        with_bytes = [device for device in items if float(device.get("bytes", 0) or 0) > 0]
-        top = max(with_bytes, key=lambda device: float(device.get("bytes", 0)), default=None)
-        top_consumer = (
-            {
-                "name": top.get("name") or "Dispositivo",
-                "mac": top.get("mac"),
-                "ip": top.get("ip"),
-                "bytes": round(float(top.get("bytes", 0)), 1),
-            }
-            if top
-            else None
-        )
+        billing = copy.deepcopy(self._billing)
+        current = billing.get("current", {})
+        top_consumer = current.get("top_device")
+        if not top_consumer:
+            candidates = [
+                device
+                for device in items
+                if float(device.get("bytes_cycle", 0) or 0) > 0
+            ]
+            top = max(
+                candidates,
+                key=lambda device: float(device.get("bytes_cycle", 0) or 0),
+                default=None,
+            )
+            if top is not None:
+                top_consumer = {
+                    "name": top.get("name") or "Dispositivo",
+                    "mac": top.get("mac"),
+                    "ip": top.get("ip"),
+                    "bytes": round(float(top.get("bytes_cycle", 0) or 0), 1),
+                }
         router = state.get("router") or {}
         if state.get("consumption_available"):
             warning = ""
@@ -509,9 +689,11 @@ class NetworkMonitor:
             "counts": {"online": online, "total": len(items)},
             "devices": items,
             "top_consumer": top_consumer,
+            "billing": billing,
             "consumption_note": (
-                f"Consumo estimado acumulado desde que se activó el monitor, "
-                f"muestreando las tasas del router cada {self.settings.network_scan_seconds} s."
+                f"Ciclo {current.get('cycle_start')} → {current.get('cycle_end')}. "
+                f"Internet: contadores WAN del router; dispositivos: estimado por "
+                f"muestreo cada {self.settings.network_scan_seconds} s."
                 if state.get("consumption_available")
                 else ""
             ),

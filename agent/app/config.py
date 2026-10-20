@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     router_info_refresh_seconds: int = 300
     router_retry_seconds: int = 300
 
+    # Ciclo de facturación mensual (corte el día indicado, hora local).
+    billing_cycle_day: int = 10
+    billing_timezone: str = "America/Monterrey"
+    billing_history_months: int = 24
+
     @property
     def procfs(self) -> str:
         return self.host_proc if Path(self.host_proc).is_dir() else "/proc"

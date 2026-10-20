@@ -46,9 +46,10 @@ agent FastAPI (solo lectura)           agent:8001
 El monitor de dispositivos sondea la red local cada minuto y mantiene un
 inventario persistente con MAC, IP, fabricante, nombre, primera/última vez visto
 y tiempo acumulado en línea. Con las credenciales del router AC12 obtiene el
-SSID, los nombres DHCP y la tasa instantánea de cada cliente; el consumo
-(MB/GB/TB) y el ranking se **estiman** integrando esas tasas cada 60 s, porque el
-router no guarda bytes acumulados por dispositivo.
+SSID, los nombres DHCP y la tasa instantánea de cada cliente; el consumo por
+dispositivo (MB/GB/TB) se **estima** integrando esas tasas cada 60 s. El consumo
+total de Internet se toma de los contadores WAN del router. El ciclo se corta el
+**día 10 de cada mes** y se guarda el histórico mensual con el mayor consumidor.
 
 El monitor de Internet comprueba la conectividad cada minuto y ejecuta un test de
 velocidad cada hora (10 MB de bajada + 2 MB de subida, ≈ 290 MB/día). El

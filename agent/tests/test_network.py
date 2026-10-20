@@ -102,7 +102,7 @@ def test_top_consumer_y_consumo_disponible(tmp_path: Path) -> None:
             "name": "Equipo A",
             "vendor": "Apple",
             "online": True,
-            "bytes": 120.0,
+            "bytes_cycle": 120.0,
         },
         "aa:bb:cc:dd:ee:02": {
             "mac": "aa:bb:cc:dd:ee:02",
@@ -110,7 +110,7 @@ def test_top_consumer_y_consumo_disponible(tmp_path: Path) -> None:
             "name": "Equipo B",
             "vendor": "Samsung",
             "online": True,
-            "bytes": 900.0,
+            "bytes_cycle": 900.0,
         },
     }
     monitor._state["consumption_available"] = True
@@ -122,3 +122,83 @@ def test_top_consumer_y_consumo_disponible(tmp_path: Path) -> None:
     assert snapshot["top_consumer"]["bytes"] == 900.0
     assert snapshot["warning"] == ""
     assert "estimado" in snapshot["consumption_note"]
+
+
+def test_ciclo_se_archiva_y_resetea(tmp_path: Path) -> None:
+    monitor = NetworkMonitor(
+        Settings(
+            network_monitor_enabled=False,
+            network_history_path=str(tmp_path / "devices.json"),
+            billing_cycle_day=10,
+            billing_timezone="UTC",
+        )
+    )
+    monitor._registry = {
+        "aa:bb:cc:dd:ee:01": {
+            "mac": "aa:bb:cc:dd:ee:01",
+            "ip": "192.168.0.20",
+            "name": "Equipo A",
+            "online": True,
+            "bytes": 1000.0,
+            "bytes_cycle": 500.0,
+        }
+    }
+    monitor._billing["current"].update(
+        {
+            "cycle_start": "2026-09-10",
+            "cycle_end": "2026-10-10",
+            "wan_bytes": 1200.0,
+            "device_bytes": 500.0,
+            "top_device": {"name": "Equipo A", "bytes": 500.0},
+        }
+    )
+    monitor._ensure_cycle(datetime(2026, 10, 10, 0, 1, tzinfo=UTC))
+
+    current = monitor._billing["current"]
+    assert current["cycle_start"] == "2026-10-10"
+    assert current["cycle_end"] == "2026-11-10"
+    assert current["wan_bytes"] == 0.0
+    assert monitor._registry["aa:bb:cc:dd:ee:01"]["bytes_cycle"] == 0.0
+    assert monitor._billing["history"][0]["cycle_start"] == "2026-09-10"
+    assert monitor._billing["history"][0]["wan_bytes"] == 1200.0
+
+
+def test_wan_suma_deltas(tmp_path: Path) -> None:
+    from app.router import RouterSnapshot
+
+    monitor = NetworkMonitor(
+        Settings(
+            network_monitor_enabled=False,
+            network_history_path=str(tmp_path / "devices.json"),
+        )
+    )
+    monitor._wan.update({"in": 100, "out": 200, "uptime": 1000})
+    now = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
+    monitor._update_wan(
+        RouterSnapshot(
+            devices=[],
+            ssid=None,
+            model="AC12",
+            fetched_at=now.isoformat(),
+            wan_in_bytes=150,
+            wan_out_bytes=250,
+            wan_uptime=1010,
+        ),
+        now,
+    )
+    assert monitor._billing["current"]["wan_bytes"] == 100.0
+    assert monitor._billing["current"]["wan_available"] is True
+
+    monitor._update_wan(
+        RouterSnapshot(
+            devices=[],
+            ssid=None,
+            model="AC12",
+            fetched_at=now.isoformat(),
+            wan_in_bytes=160,
+            wan_out_bytes=260,
+            wan_uptime=1020,
+        ),
+        now,
+    )
+    assert monitor._billing["current"]["wan_bytes"] == 120.0
