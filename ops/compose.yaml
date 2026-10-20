@@ -1,0 +1,121 @@
+# Compose de desarrollo — HomeLabDash.
+# Uso: docker compose -f ops/compose.yaml up -d --build
+# No incluye PostgreSQL: se usa la instancia existente (red apps-net).
+
+name: homelabdash
+
+services:
+  agent:
+    build:
+      context: ../agent
+    env_file:
+      - ../.env
+    environment:
+      HOST_ROOT: /host
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host:ro
+    networks:
+      - internal
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request;urllib.request.urlopen('http://localhost:8001/healthz')"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  api:
+    build:
+      context: ../backend
+    env_file:
+      - ../.env
+    environment:
+      AGENT_URL: http://agent:8001
+    networks:
+      - edge
+      - internal
+      - apps-net
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    depends_on:
+      agent:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  web:
+    build:
+      context: ../frontend
+    environment:
+      BACKEND_URL: http://api:8000
+      COOKIE_NAME: hld_session
+      COOKIE_SECURE: "false"
+      PROTOCOL_HEADER: x-forwarded-proto
+      HOST_HEADER: host
+      PORT: "3000"
+      HOST: 0.0.0.0
+    ports:
+      - "127.0.0.1:8083:3000"
+    networks:
+      - edge
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  # `edge`: publica el frontend en 127.0.0.1 (una red `internal` no publica puertos).
+  edge:
+    driver: bridge
+  # `internal`: backend ↔ agente, sin salida ni publicación.
+  internal:
+    driver: bridge
+    internal: true
+  apps-net:
+    external: true

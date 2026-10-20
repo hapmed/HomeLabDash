@@ -1,0 +1,36 @@
+# Secretos — nunca versionar
+.env
+.env.*
+!.env.example
+ACCESOS.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.uv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+htmlcov/
+.coverage
+
+# Node / SvelteKit
+node_modules/
+.svelte-kit/
+build/
+dist/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Sistema / editores
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/
+
+# Docker local
+ops/*.local.yaml
