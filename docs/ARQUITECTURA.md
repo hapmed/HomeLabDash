@@ -109,8 +109,9 @@ job periódico guarda snapshots agregados.
   persiste en el volumen `agent-data` (`/data/internet-history.json`).
 - El módulo `devices` sondea la red con UDP y lee la tabla ARP del host
   (`/host/proc/1/net/arp`); guarda el inventario en
-  `/data/network-devices.json`. El consumo por dispositivo necesitará la
-  integración con el router.
+  `/data/network-devices.json`. Con credenciales del router consulta su TDDP
+  (solo lectura) para obtener SSID, nombres y tasas; el consumo se estima
+  integrando `(up + down) × intervalo` y se etiqueta como estimado.
 
 ## Seguridad
 

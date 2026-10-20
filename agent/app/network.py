@@ -25,6 +25,7 @@ from netaddr import EUI
 from netaddr.core import NotRegisteredError
 
 from app.config import Settings
+from app.router import MercusysRouter, RouterError
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +109,7 @@ def update_registry(
     max_delta = max(1, interval_seconds) * 2
 
     for mac, data in observed.items():
+        is_online = bool(data.get("online", True))
         entry = registry.get(mac)
         if entry is None:
             registry[mac] = {
@@ -116,29 +118,45 @@ def update_registry(
                 "name": data["name"],
                 "vendor": data["vendor"],
                 "type": data.get("type", "device"),
-                "online": True,
+                "online": is_online,
                 "first_seen": now_iso,
-                "last_seen": now_iso,
-                "connected_since": now_iso,
+                "last_seen": now_iso if is_online else None,
+                "connected_since": now_iso if is_online else None,
                 "online_seconds": 0.0,
-                "sessions": 1,
+                "sessions": 1 if is_online else 0,
+                "bytes": float(data.get("bytes", 0)),
+                "rate_up_bps": int(data.get("rate_up_bps", 0)),
+                "rate_down_bps": int(data.get("rate_down_bps", 0)),
+                "connection": data.get("connection"),
+                "blocked": bool(data.get("blocked", False)),
+                "last_router_sample_at": data.get("last_router_sample_at"),
             }
             continue
 
         delta = 0.0
-        try:
-            previous = datetime.fromisoformat(entry["last_seen"])
-            delta = max(0.0, (now - previous).total_seconds())
-        except (KeyError, ValueError):
-            delta = 0.0
+        previous_raw = entry.get("last_seen")
+        if previous_raw:
+            try:
+                previous = datetime.fromisoformat(previous_raw)
+                delta = max(0.0, (now - previous).total_seconds())
+            except ValueError:
+                delta = 0.0
 
-        if not entry.get("online"):
-            entry["connected_since"] = now_iso
-            entry["sessions"] = int(entry.get("sessions", 0)) + 1
-        else:
+        if is_online:
+            if not entry.get("online"):
+                entry["connected_since"] = now_iso
+                entry["sessions"] = int(entry.get("sessions", 0)) + 1
+            else:
+                entry["online_seconds"] = float(entry.get("online_seconds", 0.0)) + min(
+                    delta, max_delta
+                )
+            entry["last_seen"] = now_iso
+        elif entry.get("online"):
             entry["online_seconds"] = float(entry.get("online_seconds", 0.0)) + min(
                 delta, max_delta
             )
+            entry["rate_up_bps"] = 0
+            entry["rate_down_bps"] = 0
 
         entry.update(
             {
@@ -146,22 +164,35 @@ def update_registry(
                 "name": data["name"],
                 "vendor": data["vendor"],
                 "type": data.get("type", entry.get("type", "device")),
-                "online": True,
-                "last_seen": now_iso,
+                "online": is_online,
             }
         )
+        for key in (
+            "bytes",
+            "rate_up_bps",
+            "rate_down_bps",
+            "connection",
+            "blocked",
+            "last_router_sample_at",
+        ):
+            if key in data:
+                entry[key] = data[key]
 
     for mac, entry in registry.items():
         if mac in observed or not entry.get("online"):
             continue
         delta = 0.0
-        try:
-            previous = datetime.fromisoformat(entry["last_seen"])
-            delta = max(0.0, (now - previous).total_seconds())
-        except (KeyError, ValueError):
-            pass
+        previous_raw = entry.get("last_seen")
+        if previous_raw:
+            try:
+                previous = datetime.fromisoformat(previous_raw)
+                delta = max(0.0, (now - previous).total_seconds())
+            except ValueError:
+                pass
         entry["online_seconds"] = float(entry.get("online_seconds", 0.0)) + min(delta, max_delta)
         entry["online"] = False
+        entry["rate_up_bps"] = 0
+        entry["rate_down_bps"] = 0
 
     return registry
 
@@ -186,7 +217,20 @@ class NetworkMonitor:
             "scan_error": None,
             "source": "arp",
             "consumption_available": False,
+            "router": {"enabled": False, "ssid": None, "model": None, "error": None},
         }
+        self._router: MercusysRouter | None = None
+        if settings.router_enabled and settings.router_password:
+            self._router = MercusysRouter(
+                settings.router_url,
+                settings.router_password,
+                info_refresh_seconds=settings.router_info_refresh_seconds,
+            )
+            self._state["router"]["enabled"] = True
+        self._router_next_attempt = 0.0
+        self._router_error: str | None = None
+        self._ssid: str | None = None
+        self._router_model: str | None = None
         self._load_registry()
         self._warning_logged = False
 
@@ -266,30 +310,87 @@ class NetworkMonitor:
                 "type": "device",
             }
 
+        now = datetime.now(UTC)
+        router_ok = False
+        if self._router is not None and time.monotonic() >= self._router_next_attempt:
+            try:
+                router_snapshot = self._router.fetch()
+                router_ok = True
+                self._router_error = None
+                self._router_next_attempt = 0.0
+                self._ssid = router_snapshot.ssid or self._ssid
+                self._router_model = router_snapshot.model
+                for device in router_snapshot.devices:
+                    existing = self._registry.get(device.mac, {})
+                    previous_sample = existing.get("last_router_sample_at")
+                    elapsed = 0.0
+                    if previous_sample:
+                        try:
+                            elapsed = max(
+                                0.0, (now - datetime.fromisoformat(previous_sample)).total_seconds()
+                            )
+                        except ValueError:
+                            elapsed = 0.0
+                    elapsed = min(elapsed, max(1, self.settings.network_scan_seconds) * 2)
+                    total_bytes = float(existing.get("bytes", 0.0))
+                    if device.online:
+                        total_bytes += (device.up_bps + device.down_bps) * elapsed
+                    vendor = existing.get("vendor") or vendor_for(device.mac, self._vendor_cache)
+                    is_server = device.ip == self.settings.network_server_ip
+                    fallback_name = (
+                        self.settings.network_server_name
+                        if is_server
+                        else _device_name(vendor, device.ip)
+                    )
+                    observed[device.mac] = {
+                        "ip": device.ip,
+                        "name": device.name or fallback_name,
+                        "vendor": "Servidor" if is_server else vendor,
+                        "type": "server" if is_server else "device",
+                        "connection": device.connection,
+                        "online": device.online,
+                        "blocked": device.blocked,
+                        "rate_up_bps": device.up_bps if device.online else 0,
+                        "rate_down_bps": device.down_bps if device.online else 0,
+                        "bytes": round(total_bytes, 1),
+                        "last_router_sample_at": now.isoformat(),
+                    }
+            except RouterError as exc:
+                self._router_error = str(exc)
+                self._router_next_attempt = (
+                    time.monotonic() + max(60, self.settings.router_retry_seconds)
+                )
+                logger.warning("no se pudo leer el router: %s", exc)
+
         gateway_vendor = "Router"
         gateway_entry = next(
             (entry for entry in entries if entry.ip == self.settings.network_gateway_ip), None
         )
         if gateway_entry is not None:
             gateway_vendor = vendor_for(gateway_entry.mac, self._vendor_cache)
+            previous_entry = self._registry.get(gateway_entry.mac, {})
             observed[gateway_entry.mac] = {
                 "ip": gateway_entry.ip,
                 "name": self.settings.network_gateway_name,
                 "vendor": gateway_vendor,
                 "type": "router",
+                "connection": "Router",
+                "bytes": float(previous_entry.get("bytes", 0.0)),
             }
             interface = interface or gateway_entry.device
 
         server_mac = self._server_mac(interface)
-        if server_mac:
+        if server_mac and server_mac not in observed:
+            previous_entry = self._registry.get(server_mac, {})
             observed[server_mac] = {
                 "ip": self.settings.network_server_ip,
                 "name": self.settings.network_server_name,
                 "vendor": "Servidor",
                 "type": "server",
+                "connection": "Cable",
+                "bytes": float(previous_entry.get("bytes", 0.0)),
             }
 
-        now = datetime.now(UTC)
         with self._lock:
             self._registry = update_registry(
                 self._registry, observed, now, self.settings.network_scan_seconds
@@ -297,8 +398,21 @@ class NetworkMonitor:
             self._state["interface"] = interface
             self._state["last_scan_at"] = now.isoformat()
             self._state["scan_error"] = None
-            snapshot = copy.deepcopy(self._registry)
-        self._save_registry(snapshot)
+            self._state["source"] = "router" if router_ok else "arp"
+            self._state["consumption_available"] = router_ok
+            self._state["network_name"] = (
+                self._ssid
+                or self.settings.network_name
+                or f"Red local {self.settings.network_cidr}"
+            )
+            self._state["router"] = {
+                "enabled": self._router is not None,
+                "ssid": self._ssid,
+                "model": self._router_model,
+                "error": self._router_error,
+            }
+            registry_snapshot = copy.deepcopy(self._registry)
+        self._save_registry(registry_snapshot)
 
     def _server_mac(self, interface: str | None) -> str | None:
         if not interface:
@@ -358,21 +472,51 @@ class NetworkMonitor:
             devices.values(),
             key=lambda device: (
                 not bool(device.get("online")),
-                -float(device.get("online_seconds", 0)),
+                -float(device.get("bytes", 0) or 0),
                 str(device.get("name", "")).lower(),
             ),
         )
         online = sum(1 for device in items if device.get("online"))
+        with_bytes = [device for device in items if float(device.get("bytes", 0) or 0) > 0]
+        top = max(with_bytes, key=lambda device: float(device.get("bytes", 0)), default=None)
+        top_consumer = (
+            {
+                "name": top.get("name") or "Dispositivo",
+                "mac": top.get("mac"),
+                "ip": top.get("ip"),
+                "bytes": round(float(top.get("bytes", 0)), 1),
+            }
+            if top
+            else None
+        )
+        router = state.get("router") or {}
+        if state.get("consumption_available"):
+            warning = ""
+        elif router.get("enabled"):
+            warning = (
+                "No se pudo leer el router"
+                + (f": {router.get('error')}" if router.get("error") else "")
+                + ". Se muestra solo la presencia detectada por ARP."
+            )
+        else:
+            warning = (
+                "El router no expone consumo acumulado por dispositivo. "
+                "Para estimarlo hace falta configurar el acceso al router."
+            )
+
         return {
             **state,
             "counts": {"online": online, "total": len(items)},
             "devices": items,
-            "top_consumer": None,
-            "scan_interval_seconds": self.settings.network_scan_seconds,
-            "warning": (
-                "El router no expone consumo acumulado por dispositivo. "
-                "Para estimarlo hace falta configurar el acceso al router."
+            "top_consumer": top_consumer,
+            "consumption_note": (
+                f"Consumo estimado acumulado desde que se activó el monitor, "
+                f"muestreando las tasas del router cada {self.settings.network_scan_seconds} s."
+                if state.get("consumption_available")
+                else ""
             ),
+            "scan_interval_seconds": self.settings.network_scan_seconds,
+            "warning": warning,
         }
 
     def payload(self) -> dict[str, Any]:
@@ -389,6 +533,8 @@ class NetworkMonitor:
             }
 
         if snap["scan_error"]:
+            status = "warn"
+        elif snap["router"].get("enabled") and snap["router"].get("error"):
             status = "warn"
         elif snap["counts"]["online"] == 0:
             status = "warn"

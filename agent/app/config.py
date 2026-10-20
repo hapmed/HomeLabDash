@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     network_server_name: str = "HomeLab (servidor)"
     network_host_sys: str = "/host/sys"
 
+    # Router Mercusys (solo lectura; opcional, mejora nombres/SSID/consumo).
+    router_enabled: bool = False
+    router_url: str = "http://192.168.0.1"
+    router_username: str = "admin"
+    router_password: str = ""
+    router_info_refresh_seconds: int = 300
+    router_retry_seconds: int = 300
+
     @property
     def procfs(self) -> str:
         return self.host_proc if Path(self.host_proc).is_dir() else "/proc"

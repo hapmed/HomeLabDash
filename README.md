@@ -41,12 +41,14 @@ agent FastAPI (solo lectura)           agent:8001
 | `memory` | RAM usada (%) | RAM, swap, presión | `/proc/meminfo` |
 | `storage` | Disco raíz (%) | Montajes, I/O | `/proc/mounts` |
 | `internet` | Velocidad de bajada e IP pública | Histórico, subida, latencia, ISP | Cloudflare speedtest + ipinfo |
-| `devices` | Dispositivos en línea | Inventario, primeras/últimas conexiones, tiempo en línea | Tabla ARP del host |
+| `devices` | Dispositivos en línea | Inventario, nombres, SSID, tasas, consumo estimado y top consumidor | ARP del host + router AC12 |
 
 El monitor de dispositivos sondea la red local cada minuto y mantiene un
-inventario persistente con MAC, IP, fabricante, primera/última vez visto y tiempo
-acumulado en línea. El **consumo por dispositivo** requiere acceso al router
-Mercusys AC12: solo publica velocidad instantánea, no bytes acumulados.
+inventario persistente con MAC, IP, fabricante, nombre, primera/última vez visto
+y tiempo acumulado en línea. Con las credenciales del router AC12 obtiene el
+SSID, los nombres DHCP y la tasa instantánea de cada cliente; el consumo
+(MB/GB/TB) y el ranking se **estiman** integrando esas tasas cada 60 s, porque el
+router no guarda bytes acumulados por dispositivo.
 
 El monitor de Internet comprueba la conectividad cada minuto y ejecuta un test de
 velocidad cada hora (10 MB de bajada + 2 MB de subida, ≈ 290 MB/día). El

@@ -64,6 +64,8 @@ def test_devices_detail(client: TestClient, fake_agent: FakeAgent) -> None:
     body = response.json()
     assert body["detail"]["counts"]["online"] == 7
     assert body["detail"]["devices"][0]["name"] == "Apple"
+    assert body["detail"]["consumption_available"] is True
+    assert body["detail"]["top_consumer"]["name"] == "Apple"
 
 
 def test_modules_degrade_when_agent_is_down(client: TestClient, down_agent: None) -> None:

@@ -76,6 +76,9 @@
 			.sort((left, right) => {
 				const onlineDiff = Number(right.online === true) - Number(left.online === true);
 				if (onlineDiff !== 0) return onlineDiff;
+				const bytesDiff =
+					(asOptionalNumber(right.bytes) ?? 0) - (asOptionalNumber(left.bytes) ?? 0);
+				if (bytesDiff !== 0) return bytesDiff;
 				return asString(left.name, '').localeCompare(asString(right.name, ''), 'es');
 			})
 	);
@@ -93,6 +96,11 @@
 	const deviceWarning = $derived(asString(detail.warning, ''));
 	const deviceLastScan = $derived(asString(detail.last_scan_at, ''));
 	const deviceScanInterval = $derived(asNumber(detail.scan_interval_seconds, 60));
+	const deviceConsumptionNote = $derived(asString(detail.consumption_note, ''));
+	const deviceTotalBytes = $derived(
+		deviceList.reduce((total, device) => total + (asOptionalNumber(device.bytes) ?? 0), 0)
+	);
+	const deviceRouter = $derived(asObject(detail.router));
 
 	function deviceTypeLabel(type: unknown): string {
 		const value = asString(type, 'device');
@@ -573,7 +581,11 @@
 		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 			<StatTile label="En línea" value={deviceOnline} hint={`de ${deviceTotal} conocidos`} />
 			<StatTile label="Red" value={deviceNetworkName} hint={deviceCidr} />
-			<StatTile label="Gateway" value={deviceGateway} hint={deviceInterface} />
+			<StatTile
+				label="Consumo total"
+				value={deviceConsumptionAvailable ? formatBytes(deviceTotalBytes) : '—'}
+				hint={deviceConsumptionAvailable ? 'estimado por muestreo' : 'sin acceso al router'}
+			/>
 			<StatTile
 				label="Último escaneo"
 				value={formatTime(deviceLastScan)}
@@ -608,8 +620,17 @@
 					</dd>
 					<dt class="text-ink-3">Consumo</dt>
 					<dd class="font-medium text-ink">
-						{deviceConsumptionAvailable ? 'Disponible' : 'No disponible'}
+						{deviceConsumptionAvailable ? 'Disponible (estimado)' : 'No disponible'}
 					</dd>
+					{#if deviceRouter.enabled}
+						<dt class="text-ink-3">Router</dt>
+						<dd class="font-medium text-ink">
+							{asString(deviceRouter.model, 'Mercusys')}
+							{#if asString(deviceRouter.ssid, '')}
+								· {asString(deviceRouter.ssid)}
+							{/if}
+						</dd>
+					{/if}
 				</dl>
 			</div>
 
@@ -618,13 +639,17 @@
 				{#if deviceTopConsumerName}
 					<p class="mt-4 text-[20px] font-semibold text-ink">{deviceTopConsumerName}</p>
 					<p class="mt-1 text-[13px] text-ink-2">
-						{formatBytes(asOptionalNumber(deviceTopConsumer.bytes))}
+						{formatBytes(asOptionalNumber(deviceTopConsumer.bytes))} estimados
+						{#if asString(deviceTopConsumer.ip, '')}· {asString(deviceTopConsumer.ip)}{/if}
 					</p>
+					{#if deviceConsumptionNote}
+						<p class="mt-2 text-[12px] text-ink-3">{deviceConsumptionNote}</p>
+					{/if}
 				{:else}
 					<p class="mt-4 text-[13px] text-ink-2">Sin datos de consumo por dispositivo.</p>
 					<p class="mt-1 text-[12px] text-ink-3">
-						El router AC12 solo publica la velocidad instantánea de cada cliente. Para estimar
-						MB/GB/TB hace falta configurar el acceso al router y muestrear esas velocidades.
+						El consumo se calcula muestreando las tasas que publica el router. Aún no hay
+						suficientes muestras o el router no está accesible.
 					</p>
 				{/if}
 			</div>
@@ -644,7 +669,7 @@
 				</p>
 			{:else}
 				<div class="mt-4 overflow-x-auto">
-					<table class="w-full min-w-[920px] border-collapse text-[13px]">
+					<table class="w-full min-w-[1100px] border-collapse text-[13px]">
 						<thead>
 							<tr
 								class="border-b border-line text-left text-[11px] tracking-wide text-ink-3 uppercase"
@@ -653,10 +678,12 @@
 								<th class="pb-2 pr-4 font-medium">Nombre</th>
 								<th class="pb-2 pr-4 font-medium">IP</th>
 								<th class="pb-2 pr-4 font-medium">MAC</th>
+								<th class="pb-2 pr-4 font-medium">Conexión</th>
 								<th class="pb-2 pr-4 font-medium">Fabricante</th>
 								<th class="pb-2 pr-4 font-medium">Primera vez</th>
 								<th class="pb-2 pr-4 font-medium">Última vez</th>
-								<th class="pb-2 pr-4 font-medium">En línea</th>
+								<th class="pb-2 pr-4 font-medium">Tiempo en línea</th>
+								<th class="pb-2 pr-4 font-medium">Tasa ↑ / ↓</th>
 								<th class="pb-2 font-medium">Consumo</th>
 							</tr>
 						</thead>
@@ -684,6 +711,7 @@
 									<td class="py-2.5 pr-4 font-mono text-[11px] text-ink-3">
 										{asString(device.mac)}
 									</td>
+									<td class="py-2.5 pr-4 text-ink-2">{asString(device.connection, '—')}</td>
 									<td class="py-2.5 pr-4 text-ink-2">{asString(device.vendor)}</td>
 									<td class="py-2.5 pr-4 text-ink-2">
 										{formatDateTime(asString(device.first_seen, ''))}
@@ -693,6 +721,11 @@
 									</td>
 									<td class="tabular py-2.5 pr-4 text-ink-2">
 										{formatUptime(asNumber(device.online_seconds, 0))}
+									</td>
+									<td class="tabular py-2.5 pr-4 text-[12px] text-ink-2">
+										↑ {formatBytes(asNumber(device.rate_up_bps, 0))}/s · ↓ {formatBytes(
+											asNumber(device.rate_down_bps, 0)
+										)}/s
 									</td>
 									<td class="tabular py-2.5 text-ink-2">
 										{bytes !== null ? formatBytes(bytes) : '—'}
@@ -705,8 +738,11 @@
 			{/if}
 
 			<p class="mt-3 text-[12px] leading-5 text-ink-3">
-				Presencia obtenida de la tabla ARP del host. «Primera vez» empieza a contar desde que se
-				activó este monitor; el tiempo en línea se acumula entre escaneos.
+				Presencia obtenida de la tabla ARP del host y del router. «Primera vez» empieza a contar
+				desde que se activó este monitor; el tiempo en línea se acumula entre escaneos.
+				{#if deviceConsumptionNote}
+					{deviceConsumptionNote}
+				{/if}
 			</p>
 		</div>
 	{:else}

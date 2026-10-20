@@ -86,3 +86,39 @@ def test_payload_deshabilitado() -> None:
     payload = NetworkMonitor(Settings(network_monitor_enabled=False)).payload()
     assert payload["status"] == "unknown"
     assert payload["detail"]["enabled"] is False
+
+
+def test_top_consumer_y_consumo_disponible(tmp_path: Path) -> None:
+    monitor = NetworkMonitor(
+        Settings(
+            network_monitor_enabled=False,
+            network_history_path=str(tmp_path / "devices.json"),
+        )
+    )
+    monitor._registry = {
+        "aa:bb:cc:dd:ee:01": {
+            "mac": "aa:bb:cc:dd:ee:01",
+            "ip": "192.168.0.20",
+            "name": "Equipo A",
+            "vendor": "Apple",
+            "online": True,
+            "bytes": 120.0,
+        },
+        "aa:bb:cc:dd:ee:02": {
+            "mac": "aa:bb:cc:dd:ee:02",
+            "ip": "192.168.0.21",
+            "name": "Equipo B",
+            "vendor": "Samsung",
+            "online": True,
+            "bytes": 900.0,
+        },
+    }
+    monitor._state["consumption_available"] = True
+    monitor._state["router"] = {"enabled": True, "ssid": "Skynet", "model": "AC12", "error": None}
+
+    snapshot = monitor.snapshot()
+    assert snapshot["consumption_available"] is True
+    assert snapshot["top_consumer"]["name"] == "Equipo B"
+    assert snapshot["top_consumer"]["bytes"] == 900.0
+    assert snapshot["warning"] == ""
+    assert "estimado" in snapshot["consumption_note"]
