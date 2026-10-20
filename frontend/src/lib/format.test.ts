@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { formatBytes, formatPercent, formatUptime } from './format';
 
 describe('formatBytes', () => {
-	it('formatea GB y MB', () => {
+	it('formatea GB, MB y TB', () => {
 		expect(formatBytes(11.4 * 1024 ** 3)).toBe('11.4 GB');
 		expect(formatBytes(512 * 1024 ** 2)).toBe('512 MB');
+		expect(formatBytes(2.5 * 1024 ** 4)).toBe('2.50 TB');
 	});
 
 	it('gestiona valores ausentes', () => {
