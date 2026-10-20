@@ -49,7 +49,8 @@ y tiempo acumulado en línea. Con las credenciales del router AC12 obtiene el
 SSID, los nombres DHCP y la tasa instantánea de cada cliente; el consumo por
 dispositivo (MB/GB/TB) se **estima** integrando esas tasas cada 60 s. El consumo
 total de Internet se toma de los contadores WAN del router. El ciclo se corta el
-**día 10 de cada mes** y se guarda el histórico mensual con el mayor consumidor.
+**día 10 de cada mes**, el consumo diario a las **00:00** y se guardan históricos
+diario y mensual con el mayor consumidor de cada periodo.
 
 El monitor de Internet comprueba la conectividad cada minuto y ejecuta un test de
 velocidad cada hora (10 MB de bajada + 2 MB de subida, ≈ 290 MB/día). El

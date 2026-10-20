@@ -106,12 +106,23 @@
 	const billingCycleEnd = $derived(asString(billingCurrent.cycle_end, '—'));
 	const billingCycleDay = $derived(asNumber(billing.cycle_day, 10));
 	const billingTimezone = $derived(asString(billing.timezone, 'America/Monterrey'));
+	const billingDailyDays = $derived(asNumber(billing.daily_history_days, 62));
 	const billingWanBytes = $derived(asOptionalNumber(billingCurrent.wan_bytes));
 	const billingWanAvailable = $derived(billingCurrent.wan_available === true);
 	const billingDeviceBytes = $derived(asOptionalNumber(billingCurrent.device_bytes) ?? 0);
 	const billingTop = $derived(asObject(billingCurrent.top_device));
 	const billingTopName = $derived(asString(billingTop.name, ''));
 	const billingTopBytes = $derived(asOptionalNumber(billingTop.bytes));
+	const daily = $derived(asObject(billing.daily));
+	const dailyCurrent = $derived(asObject(daily.current));
+	const dailyHistory = $derived(asArray(daily.history).map(asObject));
+	const dailyDate = $derived(asString(dailyCurrent.date, '—'));
+	const dailyWanBytes = $derived(asOptionalNumber(dailyCurrent.wan_bytes));
+	const dailyWanAvailable = $derived(dailyCurrent.wan_available === true);
+	const dailyDeviceBytes = $derived(asOptionalNumber(dailyCurrent.device_bytes) ?? 0);
+	const dailyTop = $derived(asObject(dailyCurrent.top_device));
+	const dailyTopName = $derived(asString(dailyTop.name, ''));
+	const dailyTopBytes = $derived(asOptionalNumber(dailyTop.bytes));
 
 	function deviceTypeLabel(type: unknown): string {
 		const value = asString(type, 'device');
@@ -591,11 +602,15 @@
 	{:else if module.id === 'devices'}
 		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 			<StatTile label="En línea" value={deviceOnline} hint={`de ${deviceTotal} conocidos`} />
-			<StatTile label="Red" value={deviceNetworkName} hint={deviceCidr} />
 			<StatTile
-				label="Consumo Internet"
+				label="Consumo hoy"
+				value={dailyWanAvailable ? formatBytes(dailyWanBytes) : formatBytes(dailyDeviceBytes)}
+				hint={dailyWanAvailable ? 'WAN real · hoy' : 'estimado · hoy'}
+			/>
+			<StatTile
+				label="Consumo del ciclo"
 				value={billingWanAvailable ? formatBytes(billingWanBytes) : formatBytes(billingDeviceBytes)}
-				hint={billingWanAvailable ? 'ciclo actual · WAN real' : 'ciclo actual · estimado'}
+				hint={billingWanAvailable ? 'WAN real · ciclo' : 'estimado · ciclo'}
 			/>
 			<StatTile
 				label="Corte del ciclo"
@@ -631,6 +646,13 @@
 					</dd>
 					<dt class="text-ink-3">Ciclo actual</dt>
 					<dd class="font-medium text-ink">{billingCycleStart} → {billingCycleEnd}</dd>
+					<dt class="text-ink-3">Hoy</dt>
+					<dd class="font-medium text-ink">
+						{dailyDate} ·
+						{dailyWanAvailable ? formatBytes(dailyWanBytes) : formatBytes(dailyDeviceBytes)}
+					</dd>
+					<dt class="text-ink-3">Corte diario</dt>
+					<dd class="font-medium text-ink">00:00 · {billingTimezone}</dd>
 					<dt class="text-ink-3">Internet (WAN)</dt>
 					<dd class="font-medium text-ink">
 						{billingWanAvailable ? formatBytes(billingWanBytes) : '—'}
@@ -667,6 +689,11 @@
 					</p>
 					{#if deviceConsumptionNote}
 						<p class="mt-2 text-[12px] text-ink-3">{deviceConsumptionNote}</p>
+					{/if}
+					{#if dailyTopName}
+						<p class="mt-2 text-[13px] text-ink-2">
+							Hoy: {dailyTopName} · {formatBytes(dailyTopBytes)}
+						</p>
 					{/if}
 				{:else}
 					<p class="mt-4 text-[13px] text-ink-2">Sin datos de consumo en este ciclo.</p>
@@ -775,6 +802,76 @@
 
 		<div class="rounded-brand-lg border border-line bg-surface p-5">
 			<div class="flex flex-wrap items-baseline justify-between gap-2">
+				<h2 class="text-[17px] font-semibold text-ink">Consumo diario</h2>
+				<span class="text-[12px] text-ink-3">
+					Hoy · corte 00:00 · últimos {Math.min(14, billingDailyDays)} días
+				</span>
+			</div>
+
+			<div class="mt-4 overflow-x-auto">
+				<table class="w-full min-w-[780px] border-collapse text-[13px]">
+					<thead>
+						<tr
+							class="border-b border-line text-left text-[11px] tracking-wide text-ink-3 uppercase"
+						>
+							<th class="pb-2 pr-4 font-medium">Día</th>
+							<th class="pb-2 pr-4 font-medium">Internet (WAN)</th>
+							<th class="pb-2 pr-4 font-medium">Dispositivos</th>
+							<th class="pb-2 pr-4 font-medium">Mayor consumidor</th>
+							<th class="pb-2 font-medium">Consumo</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr class="border-b border-line/60 bg-surface-2/40">
+							<td class="py-2.5 pr-4 font-medium text-ink">
+								{dailyDate}
+								<span class="ml-1 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] text-accent">
+									En curso
+								</span>
+							</td>
+							<td class="tabular py-2.5 pr-4 text-ink-2">
+								{dailyWanAvailable ? formatBytes(dailyWanBytes) : '—'}
+							</td>
+							<td class="tabular py-2.5 pr-4 text-ink-2">{formatBytes(dailyDeviceBytes)}</td>
+							<td class="py-2.5 pr-4 text-ink-2">{dailyTopName || '—'}</td>
+							<td class="tabular py-2.5 text-ink-2">{formatBytes(dailyTopBytes)}</td>
+						</tr>
+
+						{#each dailyHistory.slice(0, 14) as day (day.date)}
+							{@const dayTop = asObject(day.top_device)}
+							{@const dayWan = asOptionalNumber(day.wan_bytes) ?? 0}
+							<tr class="border-b border-line/60 last:border-0">
+								<td class="py-2.5 pr-4 font-medium text-ink">{asString(day.date)}</td>
+								<td class="tabular py-2.5 pr-4 text-ink-2">
+									{dayWan > 0 ? formatBytes(dayWan) : '—'}
+								</td>
+								<td class="tabular py-2.5 pr-4 text-ink-2">
+									{formatBytes(asOptionalNumber(day.device_bytes))}
+								</td>
+								<td class="py-2.5 pr-4 text-ink-2">{asString(dayTop.name, '—')}</td>
+								<td class="tabular py-2.5 text-ink-2">
+									{formatBytes(asOptionalNumber(dayTop.bytes))}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+
+			{#if dailyHistory.length === 0}
+				<p class="mt-3 text-[12px] leading-5 text-ink-3">
+					El primer día completo se archivará mañana a las 00:00. Hoy ya se está contabilizando.
+				</p>
+			{/if}
+			<p class="mt-3 text-[12px] leading-5 text-ink-3">
+				El consumo diario se reinicia a las 00:00 ({billingTimezone}). Internet usa los contadores
+				WAN del router; los dispositivos son estimados e incluyen tráfico LAN. Se conservan
+				{billingDailyDays} días.
+			</p>
+		</div>
+
+		<div class="rounded-brand-lg border border-line bg-surface p-5">
+			<div class="flex flex-wrap items-baseline justify-between gap-2">
 				<h2 class="text-[17px] font-semibold text-ink">Histórico mensual</h2>
 				<span class="text-[12px] text-ink-3">
 					Corte día {billingCycleDay} · {billingTimezone}
@@ -837,8 +934,8 @@
 
 			<p class="mt-3 text-[12px] leading-5 text-ink-3">
 				El ciclo se reinicia el día {billingCycleDay} a las 00:00 ({billingTimezone}). El consumo de
-				Internet sale de los contadores WAN del router; el de dispositivos es estimado. El primer
-				ciclo empieza al activar el monitor, así que puede estar incompleto.
+				Internet sale de los contadores WAN del router; el de dispositivos es estimado e incluye
+				tráfico LAN. El primer ciclo empieza al activar el monitor, así que puede estar incompleto.
 			</p>
 		</div>
 	{:else}

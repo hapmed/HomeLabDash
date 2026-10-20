@@ -188,6 +188,7 @@ def test_wan_suma_deltas(tmp_path: Path) -> None:
     )
     assert monitor._billing["current"]["wan_bytes"] == 100.0
     assert monitor._billing["current"]["wan_available"] is True
+    assert monitor._billing["daily"]["current"]["wan_bytes"] == 100.0
 
     monitor._update_wan(
         RouterSnapshot(
@@ -202,3 +203,42 @@ def test_wan_suma_deltas(tmp_path: Path) -> None:
         now,
     )
     assert monitor._billing["current"]["wan_bytes"] == 120.0
+
+
+def test_dia_se_archiva_y_resetea(tmp_path: Path) -> None:
+    monitor = NetworkMonitor(
+        Settings(
+            network_monitor_enabled=False,
+            network_history_path=str(tmp_path / "devices.json"),
+            billing_timezone="UTC",
+        )
+    )
+    monitor._registry = {
+        "aa:bb:cc:dd:ee:01": {
+            "mac": "aa:bb:cc:dd:ee:01",
+            "ip": "192.168.0.20",
+            "name": "Equipo A",
+            "online": True,
+            "bytes": 1000.0,
+            "bytes_cycle": 500.0,
+            "bytes_day": 300.0,
+        }
+    }
+    monitor._billing["daily"]["current"].update(
+        {
+            "date": "2026-10-19",
+            "wan_bytes": 1200.0,
+            "device_bytes": 300.0,
+            "top_device": {"name": "Equipo A", "bytes": 300.0},
+            "wan_available": True,
+        }
+    )
+    monitor._ensure_daily(datetime(2026, 10, 20, 0, 1, tzinfo=UTC))
+
+    current = monitor._billing["daily"]["current"]
+    assert current["date"] == "2026-10-20"
+    assert current["wan_bytes"] == 0.0
+    assert monitor._registry["aa:bb:cc:dd:ee:01"]["bytes_day"] == 0.0
+    history = monitor._billing["daily"]["history"]
+    assert history[0]["date"] == "2026-10-19"
+    assert history[0]["wan_bytes"] == 1200.0

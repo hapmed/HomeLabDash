@@ -70,6 +70,7 @@ class Settings(BaseSettings):
     billing_cycle_day: int = 10
     billing_timezone: str = "America/Monterrey"
     billing_history_months: int = 24
+    billing_daily_history_days: int = 62
 
     @property
     def procfs(self) -> str:

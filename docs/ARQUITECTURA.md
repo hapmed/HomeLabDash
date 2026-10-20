@@ -113,7 +113,8 @@ job periódico guarda snapshots agregados.
   (solo lectura) para obtener SSID, nombres y tasas; el consumo se estima
   integrando `(up + down) × intervalo` y se etiqueta como estimado. El total
   de Internet usa `inOctets`/`outOctets` del WAN; el ciclo se corta el día 10
-  (zona configurable) y se archiva un histórico mensual por dispositivo.
+  (zona configurable) y el día a las 00:00; se archivan históricos diario y
+  mensual por dispositivo.
 
 ## Seguridad
 
