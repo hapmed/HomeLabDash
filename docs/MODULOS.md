@@ -4,8 +4,9 @@ Cada módulo es un widget del dashboard y una página de detalle en
 `/modulo/<id>`. El estado se calcula en el agente y se expone por la API.
 
 > **Estado:** implementados y desplegados `overview`, `cpu`, `memory`, `storage`,
-> `internet`, `devices`, `docker`, `database`, `weather` y `opencode`. El resto
-> está en el registro con `enabled=false` hasta su fase.
+> `internet`, `devices`, `docker`, `database`, `network`, `weather`,
+> `temperature`, `hardware` y `opencode`. `services`, `cloudflare`, `backups` y
+> `alerts` siguen en el registro con `enabled=false` hasta su fase.
 
 ## Catálogo
 
@@ -14,17 +15,25 @@ Cada módulo es un widget del dashboard y una página de detalle en
 | `overview` | Resumen | CPU, RAM, carga, uptime, alertas | Estado general y accesos rápidos | agente | 1 |
 | `cpu` | CPU | % de uso y carga 1m | Por núcleo, frecuencia, histórico | `/proc/stat`, psutil | 2 |
 | `memory` | Memoria | RAM usada / total | RAM, swap, presión, top procesos | `/proc/meminfo`, psutil | 2 |
-| `storage` | Discos | % del disco raíz | Puntos de montaje, I/O, SMART | `df`, psutil | 2 |
+| `storage` | Discos | % del disco raíz | Puntos de montaje, I/O, inodos | `df`, psutil, sysfs | 2 (implementado) |
 | `internet` | Internet | Bajada (Mbps) e IP pública | Histórico, subida, latencia, ISP | Cloudflare speedtest, ipinfo | 1 |
 | `devices` | Dispositivos | Dispositivos en línea | Inventario, nombres, SSID, tasas, consumo diario/mensual e histórico | ARP del host + router AC12 | 1 |
 | `docker` | Docker | Contenedores activos / total | Lista, estado, CPU/RAM, red, disco y logs | Docker socket (ro) | 3 (implementado) |
-| `network` | Red | Tráfico actual | Interfaces, RX/TX, errores | `/proc/net/dev` | 3 |
+| `database` | Base de datos | Tamaño y conexiones | Tablas, índices, caché, actividad e histórico | `pg_stat_*` | 3 (implementado) |
+| `network` | Red | Tráfico actual | Interfaces, RX/TX, errores y descartes | `/sys/class/net` | 3 (implementado) |
 | `weather` | Clima | Temperatura actual | Lluvia, humedad, AQI, hourly y diario | Open-Meteo | 3 (implementado) |
+| `temperature` | Temperatura | Máxima | Sensores por chip/zona y ventiladores | `/sys/class/hwmon` | 3 (implementado) |
+| `hardware` | Hardware | Batería / discos | Equipo, discos, inodos, SMART, batería/SAI, actualizaciones | sysfs, dpkg/apt, smartctl | 5 (implementado) |
 | `opencode` | OpenCode | Estado del contenedor | Sesiones, proyectos, tokens, costo, modelos y logs | Docker + API interna | 4 (implementado) |
 | `services` | Servicios | Servicios activos | Puertos, unidades, uptime | `systemctl`, sockets | 3 |
 | `cloudflare` | Cloudflare | Estado del túnel | Latencia, conexiones, hostnames | API/cloudflared | 4 |
 | `backups` | Backups | Último backup | Historial y resultado | job local | 4 |
 | `alerts` | Alertas | Alertas activas | Umbrales e historial | BD | 4 |
+
+El backend guarda una muestra compacta de cada módulo cada 5 minutos. Los
+detalles de `overview`, `cpu`, `memory`, `storage`, `docker`, `network`,
+`temperature` y `hardware` muestran gráficas de 24 h, 7 días y 30 días mediante
+`GET /api/v1/modules/{id}/history?hours=24`.
 
 ## Contrato de un módulo
 

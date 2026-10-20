@@ -5,9 +5,13 @@
 	import { api } from '#lib/api';
 	import Meter from '#lib/components/Meter.svelte';
 	import ModuleIcon from '#lib/components/ModuleIcon.svelte';
+	import ModuleHistory from '#lib/components/ModuleHistory.svelte';
 	import OfflineBanner from '#lib/components/OfflineBanner.svelte';
 	import DatabaseDetail from '#lib/components/DatabaseDetail.svelte';
+	import HardwareDetail from '#lib/components/HardwareDetail.svelte';
+	import NetworkDetail from '#lib/components/NetworkDetail.svelte';
 	import OpencodeDetail from '#lib/components/OpencodeDetail.svelte';
+	import TemperatureDetail from '#lib/components/TemperatureDetail.svelte';
 	import WeatherDetail from '#lib/components/WeatherDetail.svelte';
 	import SpeedChart from '#lib/components/SpeedChart.svelte';
 	import StatTile from '#lib/components/StatTile.svelte';
@@ -1355,6 +1359,12 @@
 		<DatabaseDetail {detail} />
 	{:else if module.id === 'weather'}
 		<WeatherDetail {detail} />
+	{:else if module.id === 'network'}
+		<NetworkDetail {detail} />
+	{:else if module.id === 'temperature'}
+		<TemperatureDetail {detail} />
+	{:else if module.id === 'hardware'}
+		<HardwareDetail {detail} />
 	{:else if module.id === 'opencode'}
 		<OpencodeDetail {detail} />
 	{:else}
@@ -1364,5 +1374,9 @@
 				API.
 			</p>
 		</div>
+	{/if}
+
+	{#if ['overview', 'cpu', 'memory', 'storage', 'docker', 'network', 'temperature', 'hardware'].includes(module.id)}
+		<ModuleHistory moduleId={module.id} />
 	{/if}
 </section>

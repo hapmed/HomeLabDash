@@ -58,6 +58,20 @@ class Settings(BaseSettings):
     network_server_name: str = "HomeLab (servidor)"
     network_host_sys: str = "/host/sys"
 
+    # Interfaces de red del host (RX/TX, errores y estado).
+    host_network_enabled: bool = True
+    host_network_poll_seconds: int = 5
+
+    # Sensores de temperatura y ventiladores del host.
+    temperature_enabled: bool = True
+    temperature_warn_c: float = 75.0
+    temperature_critical_c: float = 85.0
+
+    # Hardware: batería, discos, inodos y salud disponible.
+    hardware_enabled: bool = True
+    hardware_inodes_warn_percent: float = 90.0
+    hardware_inodes_critical_percent: float = 95.0
+
     # Router Mercusys (solo lectura; opcional, mejora nombres/SSID/consumo).
     router_enabled: bool = False
     router_url: str = "http://192.168.0.1"

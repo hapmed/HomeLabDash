@@ -190,6 +190,18 @@ class HostMetrics:
                 usage = shutil.disk_usage(self._root_path(mountpoint))
             except OSError:
                 continue
+            inodes_total = inodes_used = inodes_free = None
+            inodes_percent = None
+            try:
+                statvfs = os.statvfs(self._root_path(mountpoint))
+            except OSError:
+                pass
+            else:
+                inodes_total = int(statvfs.f_files)
+                inodes_free = int(statvfs.f_ffree)
+                inodes_used = max(0, inodes_total - inodes_free)
+                if inodes_total:
+                    inodes_percent = round(inodes_used / inodes_total * 100, 1)
             mounts.append(
                 {
                     "device": device,
@@ -199,10 +211,17 @@ class HostMetrics:
                     "used_bytes": usage.used,
                     "free_bytes": usage.free,
                     "percent": round(usage.used / usage.total * 100, 1) if usage.total else 0.0,
+                    "inodes_total": inodes_total,
+                    "inodes_used": inodes_used,
+                    "inodes_free": inodes_free,
+                    "inodes_percent": inodes_percent,
                 }
             )
         mounts.sort(key=lambda item: (item["mountpoint"] != "/", item["mountpoint"]))
         return mounts
+
+    def mounts(self) -> list[dict[str, Any]]:
+        return self._mounts()
 
     # --- módulos --------------------------------------------------------
     def cpu(self) -> dict[str, Any]:
@@ -296,6 +315,10 @@ class HostMetrics:
                     "used_bytes": usage.used,
                     "free_bytes": usage.free,
                     "percent": round(usage.used / usage.total * 100, 1) if usage.total else 0.0,
+                    "inodes_total": None,
+                    "inodes_used": None,
+                    "inodes_free": None,
+                    "inodes_percent": None,
                 }
         percent = float(root["percent"]) if root else 0.0
         status = status_for(percent, self.settings.disk_warn, self.settings.disk_critical)

@@ -7,7 +7,7 @@ Consulta únicamente la base actual (`homelabdash`). No toca `hapmed` ni
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -335,21 +335,6 @@ def collect_stats(db: Session) -> dict[str, Any]:
     }
 
 
-def snapshot_payload(stats: dict[str, Any]) -> dict[str, Any]:
-    detail = stats["detail"]
-    return {
-        "size_bytes": detail["database"]["size_bytes"],
-        "size_pretty": detail["database"]["size_pretty"],
-        "connections": detail["connections"]["current"],
-        "max_connections": detail["connections"]["max"],
-        "cache_hit_ratio": detail["activity"]["cache_hit_ratio"],
-        "tables": detail["database"]["tables"],
-        "dead_tuples": detail["activity"]["dead_tuples"],
-        "xact_commit": detail["activity"]["xact_commit"],
-        "xact_rollback": detail["activity"]["xact_rollback"],
-    }
-
-
 def unavailable_stats(exc: Exception) -> dict[str, Any]:
     message = f"Base de datos no disponible ({type(exc).__name__})"
     return {
@@ -377,12 +362,14 @@ def get_history(db: Session, hours: int = 24) -> list[dict[str, Any]]:
     history: list[dict[str, Any]] = []
     for row in rows:
         payload = row.payload if isinstance(row.payload, dict) else {}
+        raw_metrics = payload.get("metrics")
+        metrics: dict[str, Any] = raw_metrics if isinstance(raw_metrics, dict) else payload
         history.append(
             {
                 "at": row.captured_at.isoformat() if row.captured_at else None,
-                "size_bytes": _int(payload.get("size_bytes")),
-                "connections": _int(payload.get("connections")),
-                "cache_hit_ratio": _float(payload.get("cache_hit_ratio")),
+                "size_bytes": _int(metrics.get("size_bytes")),
+                "connections": _int(metrics.get("connections")),
+                "cache_hit_ratio": _float(metrics.get("cache_hit_ratio")),
             }
         )
     return history
@@ -422,14 +409,3 @@ def build_detail(
         detail=detail,
         error=None if available else detail.get("error"),
     )
-
-
-def cleanup_history(db: Session, days: int) -> None:
-    cutoff = datetime.now(UTC) - timedelta(days=days)
-    db.execute(
-        delete(ModuleSnapshot).where(
-            ModuleSnapshot.module_id == "database",
-            ModuleSnapshot.captured_at < cutoff,
-        )
-    )
-    db.commit()

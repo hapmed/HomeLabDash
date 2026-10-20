@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     # Agente de métricas.
     agent_url: str = "http://agent:8001"
     agent_token: str = ""
-    agent_timeout_seconds: float = 3.0
+    agent_timeout_seconds: float = 8.0
 
     # Rate limiting.
     rate_limit_enabled: bool = True
@@ -58,10 +58,11 @@ class Settings(BaseSettings):
     # CORS (vacío = no se habilita).
     cors_origins: list[str] = Field(default_factory=list)
 
-    # Monitor de la base de datos (histórico de tamaño/uso).
-    database_monitor_enabled: bool = True
-    database_snapshot_seconds: int = 300
-    database_history_days: int = 30
+    # Snapshots genéricos de todos los módulos (gráficas 24 h / 7 d / 30 d).
+    snapshot_monitor_enabled: bool = True
+    snapshot_interval_seconds: int = 300
+    snapshot_history_days: int = 30
+    snapshot_max_points: int = 600
     database_connection_warn_percent: float = 80.0
     database_connection_critical_percent: float = 95.0
     database_cache_warn_percent: float = 90.0

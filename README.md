@@ -23,7 +23,7 @@ backend FastAPI                       api:8000   ──► PostgreSQL (base home
       ▼
 agent FastAPI (solo lectura)           agent:8001
       ├── /proc, /sys, / (host, ro)
-      └── (Docker socket llegará en la Fase 3)
+      └── Docker socket (ro) + SMART del host (JSON ro)
 ```
 
 - El dashboard pinta un **widget por módulo**; al pulsarlo se abre `/modulo/<id>`.
@@ -32,20 +32,29 @@ agent FastAPI (solo lectura)           agent:8001
 - El backend nunca monta el socket de Docker ni `/proc` del host: eso es cosa del
   agente, que solo expone lectura con un token interno.
 
-## Módulos de la Fase 1
+## Módulos
 
 | ID | Widget | Detalle | Fuente |
 |---|---|---|---|
 | `overview` | Carga 1m, CPU, RAM, uptime, alertas | Host, kernel, cargas | agente |
 | `cpu` | Uso (%) y carga 1m | Por núcleo, frecuencia, cargas | `/proc/stat`, `psutil` |
 | `memory` | RAM usada (%) | RAM, swap, presión | `/proc/meminfo` |
-| `storage` | Disco raíz (%) | Montajes, I/O | `/proc/mounts` |
+| `storage` | Disco raíz (%) | Montajes, I/O, inodos | `/proc/mounts` |
 | `internet` | Velocidad de bajada e IP pública | Histórico, subida, latencia, ISP | Cloudflare speedtest + ipinfo |
 | `devices` | Dispositivos en línea | Inventario, nombres, SSID, tasas, consumo diario/mensual y top consumidor | ARP del host + router AC12 |
 | `docker` | Contenedores activos / total | CPU, RAM, red, disco, sistema y logs | Docker SDK (socket ro) |
 | `database` | Tamaño y conexiones | Tablas, índices, caché, actividad e histórico | PostgreSQL `pg_stat_*` |
+| `network` | Tráfico de bajada | Interfaces, velocidad, RX/TX, errores y descartes | `/sys/class/net` del host |
 | `weather` | Temperatura actual | Lluvia, humedad, viento, UV, AQI, hourly y diario | Open-Meteo |
+| `temperature` | Temperatura máxima | Sensores por chip/zona y ventiladores | `/sys/class/hwmon` y `thermal` |
+| `hardware` | Batería / discos | Equipo, discos, inodos, SMART, batería/SAI y actualizaciones | sysfs, dpkg/apt y `smartctl` |
 | `opencode` | Estado del contenedor | Recursos, sesiones, proyectos, tokens, costos y logs | Docker inspect + API interna |
+
+Además, los módulos `overview`, `cpu`, `memory`, `storage`, `docker`,
+`network`, `temperature` y `hardware` muestran un **histórico común** con
+gráficas de 24 h, 7 días y 30 días. El backend guarda una muestra compacta cada
+5 minutos en `module_snapshots` (retención de 30 días, hasta 600 puntos por
+gráfica).
 
 El monitor de Docker usa el socket en **solo lectura** para listar contenedores y
 medir CPU, RAM, red, bloques, disco y logs; no inicia, detiene ni modifica nada.
@@ -64,8 +73,8 @@ velocidad cada hora (10 MB de bajada + 2 MB de subida, ≈ 290 MB/día). El
 histórico (168 pruebas ≈ 7 días) se guarda en el volumen `agent-data`, así que
 sobrevive a reinicios. Todo es configurable con `INTERNET_*` en `.env`.
 
-El catálogo completo (red, temperatura, servicios, Cloudflare, backups, alertas)
-está declarado con `enabled=false` y se activará en las fases 3–4 — ver
+El catálogo completo (servicios, Cloudflare, backups, alertas) está declarado
+con `enabled=false` y se activará en fases posteriores — ver
 [`docs/MODULOS.md`](./docs/MODULOS.md).
 
 El clima usa **Open-Meteo** (sin API key): estado actual, previsión hourly/diaria,
@@ -123,6 +132,25 @@ curl -s localhost:8083/api/v1/health
 Solo se publica el frontend en `127.0.0.1:8083`. El backend y el agente viven en
 una red interna; el backend además entra en `apps-net` para hablar con `postgres`.
 
+### SMART y actualizaciones
+
+El módulo `hardware` lee la batería, los discos, los inodos y el estado de
+actualizaciones desde sysfs/dpkg. Para la salud SMART se instala `smartmontools`
+en el host y se ejecuta un colector de solo lectura cada 6 horas:
+
+```bash
+sudo apt install smartmontools
+sudo install -m 644 ops/systemd/homelabdash-hardware.service /etc/systemd/system/
+sudo install -m 644 ops/systemd/homelabdash-hardware.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now homelabdash-hardware.timer
+sudo systemctl start homelabdash-hardware.service
+```
+
+El colector escribe `data/smart.json` de forma atómica; el agente lo lee a través
+del montaje de solo lectura `/host`. Si no está instalado, el módulo sigue
+funcionando y muestra SMART como «No disponible».
+
 ### Variables de entorno
 
 Copia [`.env.example`](./.env.example) a `.env` (privado, en `.gitignore`). Las
@@ -149,6 +177,7 @@ Backend (`/api/v1`, requiere sesión salvo `health`):
 | `GET` | `/api/v1/auth/me` | Usuario de la sesión |
 | `GET` | `/api/v1/modules` | Widgets del dashboard |
 | `GET` | `/api/v1/modules/{id}` | Detalle del módulo |
+| `GET` | `/api/v1/modules/{id}/history?hours=24` | Histórico compacto (1–720 h) |
 | `GET` | `/api/v1/alerts` | Alertas activas |
 | `GET` | `/api/v1/health` | Estado de la BD y del agente |
 | `GET` | `/healthz` | Liveness |
@@ -179,12 +208,15 @@ ni HTML autenticado. Instalable en iOS/iPadOS, Android, Windows y macOS.
 - Rate limit en login y auditoría de accesos (`audit_log`).
 - Contenedores sin `privileged`, sin capabilities extra, usuario no root y
   `no-new-privileges`; el agente además es de raíz de solo lectura.
+- El colector SMART es un `oneshot` del host (root) que solo lee los dispositivos
+  y escribe un JSON; no se ejecuta dentro de los contenedores.
 - `.env` y `ACCESOS.md` fuera de Git.
 
 ## Estado
 
 - Fase 1 implementada y desplegada en `/opt/apps/HomeLabDash`.
+- Módulos de red, temperatura y hardware desplegados, con histórico común de
+  24 h / 7 d / 30 d y colector SMART cada 6 h.
 - Dominio público verificado por HTTPS: `https://homelabdash.hapmed.qzz.io` (túnel `HomeLabServer` + CNAME proxied).
 - Pendiente: repositorio `hapmed/HomeLabDash` (falta el token de `hapmed`).
-- Fases 2–4: módulos de host restantes, operación (Cloudflare, backups, alertas)
-  e histórico con `module_snapshots`.
+- Pendiente: módulos de operación (Cloudflare, backups, alertas y notificaciones).

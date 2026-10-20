@@ -21,7 +21,10 @@ def test_modules_returns_phase_one_cards(client: TestClient, fake_agent: FakeAge
         "devices",
         "docker",
         "database",
+        "network",
         "weather",
+        "temperature",
+        "hardware",
         "opencode",
     ]
     assert all(card["enabled"] for card in cards)
@@ -49,7 +52,7 @@ def test_module_detail_unknown(client: TestClient, fake_agent: FakeAgent) -> Non
     headers = login_headers(client)
     assert client.get("/api/v1/modules/inventado", headers=headers).status_code == 404
     # Módulo del catálogo pero aún deshabilitado (fase posterior).
-    assert client.get("/api/v1/modules/network", headers=headers).status_code == 404
+    assert client.get("/api/v1/modules/services", headers=headers).status_code == 404
 
 
 def test_internet_detail(client: TestClient, fake_agent: FakeAgent) -> None:
@@ -158,12 +161,70 @@ def test_opencode_detail(client: TestClient, fake_agent: FakeAgent) -> None:
     assert body["detail"]["container"]["name"] == "opencode"
 
 
+def test_network_detail(client: TestClient, fake_agent: FakeAgent) -> None:
+    headers = login_headers(client)
+    response = client.get("/api/v1/modules/network", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["value"] == 12.5
+    assert body["detail"]["interfaces"][0]["name"] == "enp0s31f6"
+
+
+def test_temperature_detail(client: TestClient, fake_agent: FakeAgent) -> None:
+    headers = login_headers(client)
+    response = client.get("/api/v1/modules/temperature", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["value"] == 48.0
+    assert body["detail"]["sensors"][0]["chip"] == "coretemp"
+
+
+def test_hardware_detail(client: TestClient, fake_agent: FakeAgent) -> None:
+    headers = login_headers(client)
+    response = client.get("/api/v1/modules/hardware", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["value"] == 100
+    assert body["detail"]["disks"][0]["name"] == "nvme0n1"
+    assert body["detail"]["battery"]["status"] == "Full"
+
+
+def test_module_history(client: TestClient, fake_agent: FakeAgent) -> None:
+    from datetime import UTC, datetime
+
+    from app.db.session import get_session_factory
+    from app.models.snapshot import ModuleSnapshot
+
+    with get_session_factory()() as session:
+        session.add(
+            ModuleSnapshot(
+                module_id="cpu",
+                status="ok",
+                captured_at=datetime.now(UTC),
+                payload={"metrics": {"percent": 42.0, "load1": 0.7}},
+            )
+        )
+        session.commit()
+
+    headers = login_headers(client)
+    response = client.get("/api/v1/modules/cpu/history?hours=24", headers=headers)
+    assert response.status_code == 200
+    samples = response.json()
+    assert len(samples) == 1
+    assert samples[0]["metrics"]["percent"] == 42.0
+    assert samples[0]["at"]
+
+    assert client.get("/api/v1/modules/cpu/history").status_code == 401
+    assert client.get("/api/v1/modules/services/history", headers=headers).status_code == 404
+
+
+
 def test_modules_degrade_when_agent_is_down(client: TestClient, down_agent: None) -> None:
     headers = login_headers(client)
     response = client.get("/api/v1/modules", headers=headers)
     assert response.status_code == 200
     cards = response.json()
-    assert len(cards) == 10
+    assert len(cards) == 13
     assert {card["status"] for card in cards} <= {"unknown", "critical"}
     assert all(card["summary"]["value"] == "—" for card in cards)
 

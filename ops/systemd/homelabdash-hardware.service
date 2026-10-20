@@ -1,0 +1,10 @@
+[Unit]
+Description=HomeLabDash SMART collector
+Documentation=file:/opt/apps/HomeLabDash/README.md
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/apps/HomeLabDash/ops/hardware-collector.sh
+Nice=10
+IOSchedulingClass=idle

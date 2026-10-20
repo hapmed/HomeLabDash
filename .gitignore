@@ -34,3 +34,6 @@ Thumbs.db
 
 # Docker local
 ops/*.local.yaml
+
+# Datos locales del host (SMART, históricos, etc.)
+/data/

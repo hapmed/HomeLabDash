@@ -1,4 +1,5 @@
 import type { AlertItem, ModuleCard, ModuleDetail } from '#lib/modules';
+import type { HistorySample } from '#lib/history';
 
 export class ApiError extends Error {
 	constructor(
@@ -44,6 +45,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
 	modules: () => request<ModuleCard[]>('/modules'),
 	module: (id: string) => request<ModuleDetail>(`/modules/${encodeURIComponent(id)}`),
+	moduleHistory: (id: string, hours = 24) =>
+		request<HistorySample[]>(
+			`/modules/${encodeURIComponent(id)}/history?hours=${Math.max(1, Math.min(720, hours))}`
+		),
 	alerts: () => request<AlertItem[]>('/alerts'),
 	dockerLogs: (id: string, tail = 100) =>
 		request<{ container: string; id: string; lines: string[]; tail: number }>(

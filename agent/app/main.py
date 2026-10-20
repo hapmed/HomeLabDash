@@ -19,10 +19,13 @@ from app.docker_monitor import (
     format_uptime,
     human_bytes,
 )
+from app.hardware import HardwareMonitor
+from app.host_network import HostNetworkMonitor
 from app.internet import InternetMonitor
 from app.metrics import HostMetrics
 from app.network import NetworkMonitor
 from app.opencode_app import OpenCodeClient, OpenCodeError
+from app.temperature import TemperatureMonitor
 from app.weather import WeatherMonitor
 
 
@@ -39,6 +42,21 @@ def get_internet_monitor() -> InternetMonitor:
 @lru_cache
 def get_network_monitor() -> NetworkMonitor:
     return NetworkMonitor(get_settings())
+
+
+@lru_cache
+def get_host_network_monitor() -> HostNetworkMonitor:
+    return HostNetworkMonitor(get_settings())
+
+
+@lru_cache
+def get_temperature_monitor() -> TemperatureMonitor:
+    return TemperatureMonitor(get_settings())
+
+
+@lru_cache
+def get_hardware_monitor() -> HardwareMonitor:
+    return HardwareMonitor(get_settings())
 
 
 @lru_cache
@@ -186,15 +204,18 @@ def opencode_payload() -> dict[str, object]:
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     internet = get_internet_monitor()
     network = get_network_monitor()
+    host_network = get_host_network_monitor()
     docker_monitor = get_docker_monitor()
     weather = get_weather_monitor()
     internet.start()
     network.start()
+    host_network.start()
     docker_monitor.start()
     weather.start()
     yield
     weather.stop()
     docker_monitor.stop()
+    host_network.stop()
     network.stop()
     internet.stop()
 
@@ -233,6 +254,9 @@ def summary(metrics: HostMetrics = Depends(get_metrics)) -> dict[str, object]:
         modules["docker"] = get_docker_monitor().payload()
         modules["weather"] = get_weather_monitor().payload()
         modules["opencode"] = opencode_payload()
+        modules["network"] = get_host_network_monitor().payload()
+        modules["temperature"] = get_temperature_monitor().payload()
+        modules["hardware"] = get_hardware_monitor().payload()
     return payload
 
 
@@ -282,6 +306,24 @@ def module(module_id: str, metrics: HostMetrics = Depends(get_metrics)) -> dict[
             "id": "opencode",
             "generated_at": datetime.now(UTC).isoformat(),
             **opencode_payload(),
+        }
+    if module_id == "network":
+        return {
+            "id": "network",
+            "generated_at": datetime.now(UTC).isoformat(),
+            **get_host_network_monitor().payload(),
+        }
+    if module_id == "temperature":
+        return {
+            "id": "temperature",
+            "generated_at": datetime.now(UTC).isoformat(),
+            **get_temperature_monitor().payload(),
+        }
+    if module_id == "hardware":
+        return {
+            "id": "hardware",
+            "generated_at": datetime.now(UTC).isoformat(),
+            **get_hardware_monitor().payload(),
         }
     try:
         return metrics.module(module_id)

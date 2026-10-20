@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the HomeLabDash SMART collector every 6 hours
+Documentation=file:/opt/apps/HomeLabDash/README.md
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=6h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

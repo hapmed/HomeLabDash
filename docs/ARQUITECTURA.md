@@ -112,7 +112,16 @@ API interna (Basic auth) a través de la red `opencode_default`: estadísticas
 agregadas, proyectos, sesiones, modelos, tokens y costos. No lee mensajes ni
 prompts. El módulo de clima usa Open-Meteo (sin clave) y guarda un histórico diario en
 `/data/weather-history.json`; el de base de datos consulta `pg_stat_*` de
-`homelabdash` y guarda snapshots en `module_snapshots` cada 5 minutos.
+`homelabdash`. Un monitor genérico guarda cada 5 minutos una muestra compacta de
+todos los módulos en `module_snapshots` (retención de 30 días) para las gráficas
+de 24 h / 7 d / 30 d.
+
+Los módulos `network`, `temperature` y `hardware` leen el host sin privilegios:
+interfaces y contadores en `/sys/class/net`, sensores y ventiladores en
+`/sys/class/hwmon`, y discos, inodos, batería y actualizaciones desde sysfs y
+dpkg/apt. La salud SMART la produce un `oneshot` del host
+(`ops/hardware-collector.sh`) cada 6 horas; escribe `data/smart.json` y el agente
+solo lo lee.
 
 El módulo `devices` sondea la red con UDP y lee la tabla ARP del host
   (`/host/proc/1/net/arp`); guarda el inventario en
@@ -155,6 +164,7 @@ El módulo `devices` sondea la red con UDP y lee la tabla ARP del host
 
 1. **Base:** monorepo, compose, healthchecks, login, PWA shell, dashboard vacío.
 2. **Módulos núcleo:** resumen, CPU, memoria, discos.
-3. **Host:** Docker, red, temperatura, servicios.
-4. **Operación:** Cloudflare, backups, alertas e histórico.
+3. **Host:** Docker, red, temperatura, hardware y servicios (red, temperatura y
+   hardware desplegados; servicios pendiente).
+4. **Operación:** Cloudflare, backups, alertas y notificaciones (pendiente).
 5. **Escritorio:** PWA pulida y wrapper Tauri opcional.

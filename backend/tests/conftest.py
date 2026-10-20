@@ -22,7 +22,7 @@ os.environ.update(
         "AGENT_URL": "http://agent.invalid:8001",
         "AGENT_TOKEN": "test-agent-token",
         "RATE_LIMIT_ENABLED": "false",
-        "DATABASE_MONITOR_ENABLED": "false",
+        "SNAPSHOT_MONITOR_ENABLED": "false",
     }
 )
 
@@ -185,6 +185,93 @@ class FakeAgent:
                             "uptime_seconds": 345600,
                         },
                         "error": None,
+                    },
+                },
+                "network": {
+                    "status": "ok",
+                    "summary": {
+                        "label": "Bajada",
+                        "value": 12.5,
+                        "unit": "Mbps",
+                        "detail": "Subida 2.1 Mbps · 2 interfaces",
+                    },
+                    "detail": {
+                        "interfaces": [
+                            {
+                                "name": "enp0s31f6",
+                                "type": "ethernet",
+                                "state": "up",
+                                "up": True,
+                                "speed_mbps": 1000,
+                                "mac": "aa:bb:cc:dd:ee:ff",
+                                "rx_bps": 12_500_000,
+                                "tx_bps": 2_100_000,
+                                "rx_bytes": 123456,
+                                "tx_bytes": 654321,
+                            }
+                        ],
+                        "total_rx_bps": 12_500_000,
+                        "total_tx_bps": 2_100_000,
+                        "total_rx_errors": 0,
+                        "total_tx_errors": 0,
+                        "interface_count": 1,
+                    },
+                },
+                "temperature": {
+                    "status": "ok",
+                    "summary": {
+                        "label": "Máxima",
+                        "value": 48.0,
+                        "unit": "°C",
+                        "detail": "4 sensores",
+                    },
+                    "detail": {
+                        "sensors": [
+                            {
+                                "id": "hwmon0:temp1",
+                                "chip": "coretemp",
+                                "label": "Package id 0",
+                                "temp_c": 48.0,
+                                "max_c": 80.0,
+                                "crit_c": 100.0,
+                                "source": "hwmon",
+                            }
+                        ],
+                        "fans": [],
+                        "max_c": 48.0,
+                        "sensor_count": 1,
+                        "fan_count": 0,
+                        "warn_c": 75.0,
+                        "critical_c": 85.0,
+                    },
+                },
+                "hardware": {
+                    "status": "ok",
+                    "summary": {
+                        "label": "Batería",
+                        "value": 100,
+                        "unit": "%",
+                        "detail": "Full · 12.2 V · 0 ciclos",
+                    },
+                    "detail": {
+                        "host": {"vendor": "Dell Inc.", "model": "Latitude 5490"},
+                        "disks": [
+                            {
+                                "name": "nvme0n1",
+                                "model": "PC SN520 NVMe WDC 256GB",
+                                "serial": "123",
+                                "size_bytes": 256060514304,
+                                "rotational": False,
+                                "mountpoints": [],
+                                "smart": {"available": False, "status": "unknown"},
+                            }
+                        ],
+                        "disk_count": 1,
+                        "battery": {"percent": 100, "status": "Full", "voltage_v": 12.2},
+                        "ac": {"online": True},
+                        "ups": {"detected": False, "devices": []},
+                        "root_inodes_percent": 4.0,
+                        "updates": {"reboot_required": False, "available": None},
                     },
                 },
             },

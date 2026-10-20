@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.module import ModuleCard, ModuleDetail
@@ -23,6 +24,7 @@ from app.services.database import (
 from app.services.database import (
     unavailable_stats as unavailable_database_stats,
 )
+from app.services.history import get_history
 from app.services.module_cards import build_cards, build_detail, module_meta
 from app.services.modules import get_module
 
@@ -67,6 +69,24 @@ def docker_container_logs(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="no se pudieron leer los logs",
         ) from None
+
+
+@router.get("/{module_id}/history")
+def module_history(
+    module_id: str,
+    hours: int = 24,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+) -> list[dict[str, object]]:
+    meta = module_meta(module_id)
+    if meta is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="módulo no encontrado")
+    return get_history(
+        db,
+        module_id,
+        hours=max(1, min(24 * 30, hours)),
+        max_points=get_settings().snapshot_max_points,
+    )
 
 
 @router.get("/{module_id}", response_model=ModuleDetail)
