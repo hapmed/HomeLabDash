@@ -20,8 +20,10 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/host:ro
+      - agent-data:/data
     networks:
       - internal
+      - egress
     read_only: true
     tmpfs:
       - /tmp
@@ -115,6 +117,10 @@ services:
       retries: 3
       start_period: 20s
 
+volumes:
+  # Histórico persistente del monitor de Internet.
+  agent-data:
+
 networks:
   # `edge`: publica el frontend en 127.0.0.1 (una red `internal` no publica puertos).
   edge:
@@ -123,5 +129,8 @@ networks:
   internal:
     driver: bridge
     internal: true
+  # `egress`: solo el agente, para poder medir Internet sin exponerlo al frontend.
+  egress:
+    driver: bridge
   apps-net:
     external: true

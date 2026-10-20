@@ -40,6 +40,12 @@ agent FastAPI (solo lectura)           agent:8001
 | `cpu` | Uso (%) y carga 1m | Por núcleo, frecuencia, cargas | `/proc/stat`, `psutil` |
 | `memory` | RAM usada (%) | RAM, swap, presión | `/proc/meminfo` |
 | `storage` | Disco raíz (%) | Montajes, I/O | `/proc/mounts` |
+| `internet` | Velocidad de bajada e IP pública | Histórico, subida, latencia, ISP | Cloudflare speedtest + ipinfo |
+
+El monitor de Internet comprueba la conectividad cada minuto y ejecuta un test de
+velocidad cada hora (10 MB de bajada + 2 MB de subida, ≈ 290 MB/día). El
+histórico (168 pruebas ≈ 7 días) se guarda en el volumen `agent-data`, así que
+sobrevive a reinicios. Todo es configurable con `INTERNET_*` en `.env`.
 
 El catálogo completo (Docker, red, temperatura, servicios, Cloudflare, backups,
 alertas) está declarado con `enabled=false` y se activará en las fases 2–4 —

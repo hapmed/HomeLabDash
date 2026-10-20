@@ -1,11 +1,12 @@
 <script lang="ts">
-	import { ArrowLeft, CircleCheck, RotateCw } from '@lucide/svelte';
+	import { ArrowLeft, CircleCheck, RotateCw, WifiOff } from '@lucide/svelte';
 	import { onMount } from 'svelte';
 
 	import { api } from '#lib/api';
 	import Meter from '#lib/components/Meter.svelte';
 	import ModuleIcon from '#lib/components/ModuleIcon.svelte';
 	import OfflineBanner from '#lib/components/OfflineBanner.svelte';
+	import SpeedChart from '#lib/components/SpeedChart.svelte';
 	import StatTile from '#lib/components/StatTile.svelte';
 	import StatusBadge from '#lib/components/StatusBadge.svelte';
 	import {
@@ -25,6 +26,7 @@
 		formatTime,
 		formatUptime
 	} from '#lib/format';
+	import { parseHistory } from '#lib/internet';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -43,6 +45,30 @@
 	const io = $derived(asObject(detail.io));
 	const model = $derived(asString(detail.model, 'CPU'));
 	const pressureEntries = $derived(Object.entries(pressure));
+
+	const internetSamples = $derived(parseHistory(detail.history));
+	const internetOnline = $derived(detail.online === true);
+	const internetIp = $derived(asString(detail.public_ip));
+	const internetIpVersion = $derived(asString(detail.ip_version, ''));
+	const internetCountry = $derived(asString(detail.country, ''));
+	const internetIsp = $derived(asString(detail.isp));
+	const internetLocation = $derived(
+		[asString(detail.city, ''), asString(detail.region, ''), internetCountry]
+			.filter(Boolean)
+			.join(', ') || '—'
+	);
+	const internetDownload = $derived(asOptionalNumber(detail.download_mbps));
+	const internetUpload = $derived(asOptionalNumber(detail.upload_mbps));
+	const internetLatency = $derived(asOptionalNumber(detail.latency_ms));
+	const internetJitter = $derived(asOptionalNumber(detail.jitter_ms));
+	const internetLastTest = $derived(asString(detail.last_test_at, ''));
+	const internetNextTest = $derived(asString(detail.next_test_at, ''));
+	const internetInterval = $derived(asNumber(detail.test_interval_minutes, 60));
+	const internetPreviousIp = $derived(asString(detail.previous_ip, ''));
+	const internetError = $derived(asString(detail.last_error, ''));
+	const internetConsumption = $derived(
+		asNumber(detail.download_test_bytes, 0) + asNumber(detail.upload_test_bytes, 0)
+	);
 
 	async function refresh() {
 		if (typeof document !== 'undefined' && document.hidden) return;
@@ -378,6 +404,139 @@
 					</tbody>
 				</table>
 			</div>
+		</div>
+	{:else if module.id === 'internet'}
+		{#if !internetOnline}
+			<div
+				role="status"
+				class="flex items-start gap-3 rounded-brand-lg border border-danger/30 bg-danger/10 px-4 py-3 text-[14px] text-ink"
+			>
+				<WifiOff size={18} class="mt-0.5 shrink-0 text-danger" aria-hidden="true" />
+				<p>Sin conexión a Internet. Se muestra el último estado conocido.</p>
+			</div>
+		{/if}
+
+		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+			<StatTile
+				label="Bajada"
+				value={internetDownload !== null ? `${formatNumber(internetDownload, 1)} Mbps` : '—'}
+				hint="última prueba de velocidad"
+			/>
+			<StatTile
+				label="Subida"
+				value={internetUpload !== null ? `${formatNumber(internetUpload, 1)} Mbps` : '—'}
+				hint="última prueba de velocidad"
+			/>
+			<StatTile
+				label="Latencia"
+				value={internetLatency !== null ? `${formatNumber(internetLatency, 1)} ms` : '—'}
+				hint={internetJitter !== null ? `jitter ${formatNumber(internetJitter, 1)} ms` : null}
+			/>
+			<StatTile
+				label="IP pública"
+				value={internetIp}
+				hint={[internetIpVersion, internetCountry].filter(Boolean).join(' · ') || null}
+			/>
+		</div>
+
+		<div class="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+			<div class="rounded-brand-lg border border-line bg-surface p-5">
+				<div class="flex flex-wrap items-baseline justify-between gap-2">
+					<h2 class="text-[17px] font-semibold text-ink">Histórico de velocidad</h2>
+					<span class="text-[12px] text-ink-3">
+						{internetSamples.length} pruebas · cada {internetInterval} min
+					</span>
+				</div>
+				<div class="mt-4">
+					<SpeedChart history={detail.history} />
+				</div>
+			</div>
+
+			<div class="rounded-brand-lg border border-line bg-surface p-5">
+				<h2 class="text-[17px] font-semibold text-ink">Conexión</h2>
+				<dl class="mt-4 grid gap-x-4 gap-y-3 text-[13px] sm:grid-cols-[128px_1fr]">
+					<dt class="text-ink-3">Estado</dt>
+					<dd class="font-medium {internetOnline ? 'text-success' : 'text-danger'}">
+						{internetOnline ? 'En línea' : 'Sin conexión'}
+					</dd>
+					<dt class="text-ink-3">Proveedor</dt>
+					<dd class="font-medium text-ink">{internetIsp}</dd>
+					<dt class="text-ink-3">Ubicación</dt>
+					<dd class="font-medium text-ink">{internetLocation}</dd>
+					<dt class="text-ink-3">Edge</dt>
+					<dd class="font-medium text-ink">
+						{[
+							asString(detail.colo, ''),
+							asString(detail.http_version, ''),
+							asString(detail.tls, '')
+						]
+							.filter(Boolean)
+							.join(' · ') || '—'}
+					</dd>
+					<dt class="text-ink-3">Última prueba</dt>
+					<dd class="font-medium text-ink">{formatDateTime(internetLastTest)}</dd>
+					<dt class="text-ink-3">Próxima</dt>
+					<dd class="font-medium text-ink">{formatDateTime(internetNextTest)}</dd>
+					<dt class="text-ink-3">Consumo por prueba</dt>
+					<dd class="font-medium text-ink">≈ {formatBytes(internetConsumption)}</dd>
+				</dl>
+
+				{#if internetPreviousIp && internetPreviousIp !== '—' && internetPreviousIp !== internetIp}
+					<p
+						class="mt-4 rounded-brand border border-warning/30 bg-warning/10 px-3 py-2 text-[12px] text-ink"
+					>
+						La IP pública cambió: antes {internetPreviousIp}, ahora {internetIp}.
+					</p>
+				{/if}
+			</div>
+		</div>
+
+		{#if internetError}
+			<p
+				class="rounded-brand-lg border border-warning/30 bg-warning/10 px-4 py-3 text-[13px] text-ink"
+			>
+				Último error de medición: {internetError}
+			</p>
+		{/if}
+
+		<div class="rounded-brand-lg border border-line bg-surface p-5">
+			<h2 class="text-[17px] font-semibold text-ink">Últimas pruebas</h2>
+			{#if internetSamples.length === 0}
+				<p class="mt-4 text-[13px] text-ink-3">
+					Todavía no hay pruebas registradas. La primera se ejecuta al arrancar el agente.
+				</p>
+			{:else}
+				<div class="mt-4 overflow-x-auto">
+					<table class="w-full min-w-[520px] border-collapse text-[13px]">
+						<thead>
+							<tr
+								class="border-b border-line text-left text-[11px] tracking-wide text-ink-3 uppercase"
+							>
+								<th class="pb-2 pr-4 font-medium">Fecha</th>
+								<th class="pb-2 pr-4 font-medium">Bajada</th>
+								<th class="pb-2 pr-4 font-medium">Subida</th>
+								<th class="pb-2 font-medium">Latencia</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each [...internetSamples].slice(-10).reverse() as sample (sample.at)}
+								<tr class="border-b border-line/60 last:border-0">
+									<td class="py-2.5 pr-4 text-ink-2">{formatDateTime(sample.at)}</td>
+									<td class="tabular py-2.5 pr-4 font-medium text-ink">
+										{formatNumber(sample.download_mbps, 1)} Mbps
+									</td>
+									<td class="tabular py-2.5 pr-4 text-ink-2">
+										{formatNumber(sample.upload_mbps, 1)} Mbps
+									</td>
+									<td class="tabular py-2.5 text-ink-2">
+										{sample.latency_ms !== null ? `${formatNumber(sample.latency_ms, 1)} ms` : '—'}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
 		</div>
 	{:else}
 		<div class="rounded-brand-lg border border-line bg-surface p-6">

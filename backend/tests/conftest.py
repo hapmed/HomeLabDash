@@ -62,6 +62,27 @@ class FakeAgent:
                     "summary": {"label": "Disco raíz", "value": 40.0, "unit": "%"},
                     "detail": {"mounts": []},
                 },
+                "internet": {
+                    "status": "ok",
+                    "summary": {
+                        "label": "Bajada",
+                        "value": 512.3,
+                        "unit": "Mbps",
+                        "detail": "Subida 300.1 Mbps · 12.4 ms · IP 203.0.113.7",
+                    },
+                    "detail": {
+                        "online": True,
+                        "public_ip": "203.0.113.7",
+                        "history": [
+                            {
+                                "at": "2026-10-19T12:00:00+00:00",
+                                "download_mbps": 512.3,
+                                "upload_mbps": 300.1,
+                                "latency_ms": 12.4,
+                            }
+                        ],
+                    },
+                },
             },
         }
 

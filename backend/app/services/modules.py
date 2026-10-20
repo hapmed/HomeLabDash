@@ -23,6 +23,7 @@ MODULES: tuple[ModuleMeta, ...] = (
     ModuleMeta("cpu", "CPU", "Uso, carga y frecuencia", "cpu", 20, True),
     ModuleMeta("memory", "Memoria", "RAM, swap y presión", "memory-stick", 30, True),
     ModuleMeta("storage", "Discos", "Uso por punto de montaje", "hard-drive", 40, True),
+    ModuleMeta("internet", "Internet", "Velocidad, IP pública y latencia", "globe", 45, True),
     ModuleMeta("docker", "Docker", "Contenedores y consumo", "container", 50, False),
     ModuleMeta("network", "Red", "Interfaces y tráfico", "network", 60, False),
     ModuleMeta("temperature", "Temperatura", "Sensores del host", "thermometer", 70, False),

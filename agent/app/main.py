@@ -1,18 +1,35 @@
 """Arranque y rutas del agente (solo lectura, token interno)."""
 
 import secrets
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 
 from app.config import get_settings
+from app.internet import InternetMonitor
 from app.metrics import HostMetrics
 
 
 @lru_cache
 def get_metrics() -> HostMetrics:
     return HostMetrics(get_settings())
+
+
+@lru_cache
+def get_internet_monitor() -> InternetMonitor:
+    return InternetMonitor(get_settings())
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    monitor = get_internet_monitor()
+    monitor.start()
+    yield
+    monitor.stop()
 
 
 def require_agent_token(
@@ -31,7 +48,7 @@ def require_agent_token(
         )
 
 
-app = FastAPI(title="HomeLabDash Agent", version="0.1.0")
+app = FastAPI(title="HomeLabDash Agent", version="0.1.0", lifespan=lifespan)
 
 
 @app.get("/healthz")
@@ -41,11 +58,21 @@ def healthz() -> dict[str, str]:
 
 @app.get("/v1/summary", dependencies=[Depends(require_agent_token)])
 def summary(metrics: HostMetrics = Depends(get_metrics)) -> dict[str, object]:
-    return metrics.summary()
+    payload = metrics.summary()
+    modules = payload.setdefault("modules", {})
+    if isinstance(modules, dict):
+        modules["internet"] = get_internet_monitor().payload()
+    return payload
 
 
 @app.get("/v1/modules/{module_id}", dependencies=[Depends(require_agent_token)])
 def module(module_id: str, metrics: HostMetrics = Depends(get_metrics)) -> dict[str, object]:
+    if module_id == "internet":
+        return {
+            "id": "internet",
+            "generated_at": datetime.now(UTC).isoformat(),
+            **get_internet_monitor().payload(),
+        }
     try:
         return metrics.module(module_id)
     except KeyError:

@@ -3,8 +3,8 @@
 Cada módulo es un widget del dashboard y una página de detalle en
 `/modulo/<id>`. El estado se calcula en el agente y se expone por la API.
 
-> **Estado (Fase 1):** implementados y desplegados `overview`, `cpu`, `memory` y
-> `storage`. El resto está en el registro con `enabled=false` hasta su fase.
+> **Estado (Fase 1):** implementados y desplegados `overview`, `cpu`, `memory`,
+> `storage` e `internet`. El resto está en el registro con `enabled=false` hasta su fase.
 
 ## Catálogo
 
@@ -14,6 +14,7 @@ Cada módulo es un widget del dashboard y una página de detalle en
 | `cpu` | CPU | % de uso y carga 1m | Por núcleo, frecuencia, histórico | `/proc/stat`, psutil | 2 |
 | `memory` | Memoria | RAM usada / total | RAM, swap, presión, top procesos | `/proc/meminfo`, psutil | 2 |
 | `storage` | Discos | % del disco raíz | Puntos de montaje, I/O, SMART | `df`, psutil | 2 |
+| `internet` | Internet | Bajada (Mbps) e IP pública | Histórico, subida, latencia, ISP | Cloudflare speedtest, ipinfo | 1 |
 | `docker` | Docker | Contenedores activos / total | Lista, estado, CPU/RAM, logs | Docker socket (ro) | 3 |
 | `network` | Red | Tráfico actual | Interfaces, RX/TX, errores | `/proc/net/dev` | 3 |
 | `temperature` | Temperatura | Temperatura máxima | Sensores por zona | `/sys/class/thermal` | 3 |

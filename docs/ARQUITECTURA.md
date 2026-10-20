@@ -104,6 +104,9 @@ job periódico guarda snapshots agregados.
   (protección CSRF). Sin esos encabezados, el login responde 403.
 - El registro de módulos vive en `backend/app/services/modules.py`; el agente solo
   aporta `status`, `summary` y `detail` por módulo.
+- El módulo `internet` mantiene su propio hilo en el agente: conectividad cada
+  minuto, IP pública cada 15 min y test de velocidad cada hora. El histórico se
+  persiste en el volumen `agent-data` (`/data/internet-history.json`).
 
 ## Seguridad
 
