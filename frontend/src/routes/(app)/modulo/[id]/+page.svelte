@@ -34,6 +34,7 @@
 		formatUptime
 	} from '#lib/format';
 	import { parseHistory } from '#lib/internet';
+	import { HISTORY_METRICS } from '#lib/history';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -1376,7 +1377,7 @@
 		</div>
 	{/if}
 
-	{#if ['overview', 'cpu', 'memory', 'storage', 'docker', 'network', 'temperature', 'hardware'].includes(module.id)}
+	{#if HISTORY_METRICS[module.id]}
 		<ModuleHistory moduleId={module.id} />
 	{/if}
 </section>
