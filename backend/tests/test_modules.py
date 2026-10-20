@@ -20,6 +20,9 @@ def test_modules_returns_phase_one_cards(client: TestClient, fake_agent: FakeAge
         "internet",
         "devices",
         "docker",
+        "database",
+        "weather",
+        "opencode",
     ]
     assert all(card["enabled"] for card in cards)
     cpu = next(card for card in cards if card["id"] == "cpu")
@@ -92,13 +95,76 @@ def test_docker_logs(client: TestClient, fake_agent: FakeAgent) -> None:
     assert client.get("/api/v1/modules/docker/containers/postgres/logs").status_code == 401
 
 
+def test_database_detail(client: TestClient, fake_agent: FakeAgent, monkeypatch) -> None:
+    headers = login_headers(client)
+    stats = {
+        "status": "ok",
+        "summary": {
+            "label": "Tamaño",
+            "value": "12 MB",
+            "detail": "8 tablas · 2/100 conexiones · caché 99.5%",
+        },
+        "detail": {
+            "database": {
+                "name": "homelabdash",
+                "size_bytes": 12582912,
+                "size_pretty": "12 MB",
+                "tables": 8,
+                "indexes": 12,
+                "server_version": "17.4",
+                "version": "PostgreSQL 17.4",
+                "uptime_seconds": 3600,
+                "started_at": "2026-10-20T11:00:00+00:00",
+            },
+            "connections": {"current": 2, "max": 100, "percent": 2.0},
+            "activity": {"cache_hit_ratio": 99.5, "dead_tuples": 0},
+            "tables": [],
+            "indexes": [],
+            "settings": {},
+            "alerts": [],
+        },
+        "sampled_at": "2026-10-20T12:00:00+00:00",
+    }
+    monkeypatch.setattr("app.api.modules.collect_database_stats", lambda db: stats)
+    monkeypatch.setattr(
+        "app.api.modules.get_database_history",
+        lambda db: [{"at": "2026-10-20T12:00:00+00:00", "size_bytes": 12582912}],
+    )
+
+    response = client.get("/api/v1/modules/database", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["summary"]["value"] == "12 MB"
+    assert body["detail"]["database"]["name"] == "homelabdash"
+    assert body["detail"]["history"][0]["size_bytes"] == 12582912
+
+
+def test_weather_detail(client: TestClient, fake_agent: FakeAgent) -> None:
+    headers = login_headers(client)
+    response = client.get("/api/v1/modules/weather", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["value"] == 24.5
+    assert body["detail"]["air"]["category"] == "Buena"
+
+
+def test_opencode_detail(client: TestClient, fake_agent: FakeAgent) -> None:
+    headers = login_headers(client)
+    response = client.get("/api/v1/modules/opencode", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["value"] == "running"
+    assert body["detail"]["container"]["name"] == "opencode"
+
+
 def test_modules_degrade_when_agent_is_down(client: TestClient, down_agent: None) -> None:
     headers = login_headers(client)
     response = client.get("/api/v1/modules", headers=headers)
     assert response.status_code == 200
     cards = response.json()
-    assert len(cards) == 7
-    assert {card["status"] for card in cards} == {"unknown"}
+    assert len(cards) == 10
+    assert {card["status"] for card in cards} <= {"unknown", "critical"}
     assert all(card["summary"]["value"] == "—" for card in cards)
 
     detail = client.get("/api/v1/modules/cpu", headers=headers)

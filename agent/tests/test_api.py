@@ -31,6 +31,8 @@ def test_summary_devuelve_metricas_del_host() -> None:
         "internet",
         "devices",
         "docker",
+        "weather",
+        "opencode",
     }
     assert body["modules"]["cpu"]["summary"]["unit"] == "%"
     assert body["modules"]["overview"]["detail"]["hostname"]
@@ -39,6 +41,8 @@ def test_summary_devuelve_metricas_del_host() -> None:
     assert body["modules"]["internet"]["status"] == "unknown"
     assert body["modules"]["devices"]["status"] == "unknown"
     assert body["modules"]["docker"]["status"] == "unknown"
+    assert body["modules"]["weather"]["status"] == "unknown"
+    assert body["modules"]["opencode"]["status"] == "unknown"
 
 
 def test_detalle_de_modulo() -> None:
@@ -71,6 +75,22 @@ def test_detalle_de_docker() -> None:
     body = response.json()
     assert body["id"] == "docker"
     assert body["detail"]["enabled"] is False
+
+
+def test_detalle_de_weather() -> None:
+    response = client.get("/v1/modules/weather", headers=AUTH)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == "weather"
+    assert body["detail"]["enabled"] is False
+
+
+def test_detalle_de_opencode() -> None:
+    response = client.get("/v1/modules/opencode", headers=AUTH)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == "opencode"
+    assert body["detail"]["error"] == "deshabilitado"
 
 
 def test_modulo_desconocido() -> None:

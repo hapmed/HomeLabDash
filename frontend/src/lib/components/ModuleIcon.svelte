@@ -3,8 +3,10 @@
 		BellRing,
 		CircleHelp,
 		Cloud,
+		CloudSun,
 		Container,
 		Cpu,
+		Database,
 		DatabaseBackup,
 		Gauge,
 		Globe,
@@ -13,6 +15,7 @@
 		Network,
 		Router,
 		Server,
+		Terminal,
 		Thermometer
 	} from '@lucide/svelte';
 
@@ -25,6 +28,9 @@
 		container: Container,
 		network: Network,
 		router: Router,
+		database: Database,
+		'cloud-sun': CloudSun,
+		terminal: Terminal,
 		thermometer: Thermometer,
 		server: Server,
 		cloud: Cloud,

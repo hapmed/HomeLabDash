@@ -10,10 +10,17 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 
 from app.config import get_settings
-from app.docker_monitor import DockerLogsError, DockerMonitor, DockerNotFoundError
+from app.docker_monitor import (
+    DockerLogsError,
+    DockerMonitor,
+    DockerNotFoundError,
+    format_uptime,
+    human_bytes,
+)
 from app.internet import InternetMonitor
 from app.metrics import HostMetrics
 from app.network import NetworkMonitor
+from app.weather import WeatherMonitor
 
 
 @lru_cache
@@ -36,15 +43,77 @@ def get_docker_monitor() -> DockerMonitor:
     return DockerMonitor(get_settings())
 
 
+@lru_cache
+def get_weather_monitor() -> WeatherMonitor:
+    return WeatherMonitor(get_settings())
+
+
+def opencode_payload() -> dict[str, object]:
+    settings = get_settings()
+    if not settings.opencode_enabled:
+        return {
+            "status": "unknown",
+            "summary": {
+                "label": "OpenCode",
+                "value": "—",
+                "detail": "Módulo deshabilitado",
+            },
+            "detail": {"error": "deshabilitado"},
+        }
+    try:
+        container = get_docker_monitor().container_detail(settings.opencode_container)
+    except DockerNotFoundError:
+        return {
+            "status": "critical",
+            "summary": {
+                "label": "OpenCode",
+                "value": "—",
+                "detail": "Contenedor no encontrado",
+            },
+            "detail": {"error": "contenedor no encontrado"},
+        }
+    except DockerLogsError:
+        return {
+            "status": "critical",
+            "summary": {
+                "label": "OpenCode",
+                "value": "—",
+                "detail": "Docker no disponible",
+            },
+            "detail": {"error": "docker no disponible"},
+        }
+
+    state = str(container.get("state") or "unknown")
+    health = container.get("health")
+    state_ok = state == "running" and health != "unhealthy"
+    cpu = float(container.get("cpu_percent", 0) or 0)
+    memory = int(container.get("memory_used", 0) or 0)
+    uptime = int(container.get("uptime_seconds", 0) or 0)
+    return {
+        "status": "ok" if state_ok else "warn",
+        "summary": {
+            "label": "OpenCode",
+            "value": state,
+            "detail": (
+                f"CPU {cpu:.1f}% · RAM {human_bytes(memory)} · up {format_uptime(uptime)}"
+            ),
+        },
+        "detail": {"container": container, "error": None},
+    }
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     internet = get_internet_monitor()
     network = get_network_monitor()
     docker_monitor = get_docker_monitor()
+    weather = get_weather_monitor()
     internet.start()
     network.start()
     docker_monitor.start()
+    weather.start()
     yield
+    weather.stop()
     docker_monitor.stop()
     network.stop()
     internet.stop()
@@ -82,6 +151,8 @@ def summary(metrics: HostMetrics = Depends(get_metrics)) -> dict[str, object]:
         modules["internet"] = get_internet_monitor().payload()
         modules["devices"] = get_network_monitor().payload()
         modules["docker"] = get_docker_monitor().payload()
+        modules["weather"] = get_weather_monitor().payload()
+        modules["opencode"] = opencode_payload()
     return payload
 
 
@@ -119,6 +190,18 @@ def module(module_id: str, metrics: HostMetrics = Depends(get_metrics)) -> dict[
             "id": "docker",
             "generated_at": datetime.now(UTC).isoformat(),
             **get_docker_monitor().payload(),
+        }
+    if module_id == "weather":
+        return {
+            "id": "weather",
+            "generated_at": datetime.now(UTC).isoformat(),
+            **get_weather_monitor().payload(),
+        }
+    if module_id == "opencode":
+        return {
+            "id": "opencode",
+            "generated_at": datetime.now(UTC).isoformat(),
+            **opencode_payload(),
         }
     try:
         return metrics.module(module_id)

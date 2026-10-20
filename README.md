@@ -43,6 +43,9 @@ agent FastAPI (solo lectura)           agent:8001
 | `internet` | Velocidad de bajada e IP pública | Histórico, subida, latencia, ISP | Cloudflare speedtest + ipinfo |
 | `devices` | Dispositivos en línea | Inventario, nombres, SSID, tasas, consumo diario/mensual y top consumidor | ARP del host + router AC12 |
 | `docker` | Contenedores activos / total | CPU, RAM, red, disco, sistema y logs | Docker SDK (socket ro) |
+| `database` | Tamaño y conexiones | Tablas, índices, caché, actividad e histórico | PostgreSQL `pg_stat_*` |
+| `weather` | Temperatura actual | Lluvia, humedad, viento, UV, AQI, hourly y diario | Open-Meteo |
+| `opencode` | Estado del contenedor | Recursos, configuración, montajes y logs | Docker inspect + logs |
 
 El monitor de Docker usa el socket en **solo lectura** para listar contenedores y
 medir CPU, RAM, red, bloques, disco y logs; no inicia, detiene ni modifica nada.
@@ -64,6 +67,10 @@ sobrevive a reinicios. Todo es configurable con `INTERNET_*` en `.env`.
 El catálogo completo (red, temperatura, servicios, Cloudflare, backups, alertas)
 está declarado con `enabled=false` y se activará en las fases 3–4 — ver
 [`docs/MODULOS.md`](./docs/MODULOS.md).
+
+El clima usa **Open-Meteo** (sin API key): estado actual, previsión hourly/diaria,
+lluvia acumulada, calidad del aire y un histórico diario persistente. La base de
+datos solo consulta `homelabdash` mediante `pg_stat_*`, en modo lectura.
 
 ## Estructura
 

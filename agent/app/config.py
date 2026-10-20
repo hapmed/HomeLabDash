@@ -79,6 +79,23 @@ class Settings(BaseSettings):
     billing_history_months: int = 24
     billing_daily_history_days: int = 62
 
+    # Clima (Open-Meteo, sin API key).
+    weather_enabled: bool = True
+    weather_latitude: float = 25.6866
+    weather_longitude: float = -100.3161
+    weather_timezone: str = "America/Monterrey"
+    weather_location: str = "Monterrey"
+    weather_poll_seconds: int = 900
+    weather_history_path: str = "/data/weather-history.json"
+    weather_history_days: int = 730
+    weather_payload_history_days: int = 90
+    weather_forecast_url: str = "https://api.open-meteo.com/v1/forecast"
+    weather_air_url: str = "https://air-quality-api.open-meteo.com/v1/air-quality"
+
+    # Módulo dedicado de OpenCode (usa el socket Docker).
+    opencode_enabled: bool = True
+    opencode_container: str = "opencode"
+
     @property
     def procfs(self) -> str:
         return self.host_proc if Path(self.host_proc).is_dir() else "/proc"

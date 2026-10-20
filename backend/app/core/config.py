@@ -58,6 +58,16 @@ class Settings(BaseSettings):
     # CORS (vacío = no se habilita).
     cors_origins: list[str] = Field(default_factory=list)
 
+    # Monitor de la base de datos (histórico de tamaño/uso).
+    database_monitor_enabled: bool = True
+    database_snapshot_seconds: int = 300
+    database_history_days: int = 30
+    database_connection_warn_percent: float = 80.0
+    database_connection_critical_percent: float = 95.0
+    database_cache_warn_percent: float = 90.0
+    database_dead_tuple_warn_percent: float = 20.0
+    database_long_query_warn_seconds: float = 30.0
+
     @property
     def is_production(self) -> bool:
         return self.environment == "prod"

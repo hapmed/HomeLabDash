@@ -6,6 +6,9 @@
 	import Meter from '#lib/components/Meter.svelte';
 	import ModuleIcon from '#lib/components/ModuleIcon.svelte';
 	import OfflineBanner from '#lib/components/OfflineBanner.svelte';
+	import DatabaseDetail from '#lib/components/DatabaseDetail.svelte';
+	import OpencodeDetail from '#lib/components/OpencodeDetail.svelte';
+	import WeatherDetail from '#lib/components/WeatherDetail.svelte';
 	import SpeedChart from '#lib/components/SpeedChart.svelte';
 	import StatTile from '#lib/components/StatTile.svelte';
 	import StatusBadge from '#lib/components/StatusBadge.svelte';
@@ -166,6 +169,61 @@
 		return asString(state, '—');
 	}
 
+	const dbDatabase = $derived(asObject(detail.database));
+	const dbConnections = $derived(asObject(detail.connections));
+	const dbActivity = $derived(asObject(detail.activity));
+	const dbTables = $derived(asArray(detail.tables).map(asObject));
+	const dbIndexes = $derived(asArray(detail.indexes).map(asObject));
+	const dbSettings = $derived(asObject(detail.settings));
+	const dbAlerts = $derived(asArray(detail.alerts).map((item) => asString(item, '')));
+	const dbHistory = $derived(asArray(detail.history).map(asObject));
+	const dbName = $derived(asString(dbDatabase.name, 'homelabdash'));
+	const dbVersion = $derived(asString(dbDatabase.version, 'PostgreSQL'));
+	const dbServerVersion = $derived(asString(dbDatabase.server_version, ''));
+	const dbSizePretty = $derived(asString(dbDatabase.size_pretty, '—'));
+	const dbSizeBytes = $derived(asOptionalNumber(dbDatabase.size_bytes));
+	const dbTablesCount = $derived(asNumber(dbDatabase.tables, 0));
+	const dbIndexesCount = $derived(asNumber(dbDatabase.indexes, 0));
+	const dbStartedAt = $derived(asString(dbDatabase.started_at, ''));
+	const dbUptime = $derived(asNumber(dbDatabase.uptime_seconds, 0));
+	const dbCurrentConnections = $derived(asNumber(dbConnections.current, 0));
+	const dbMaxConnections = $derived(asNumber(dbConnections.max, 0));
+	const dbConnectionPercent = $derived(asNumber(dbConnections.percent, 0));
+	const dbActiveConnections = $derived(asNumber(dbConnections.active, 0));
+	const dbIdleConnections = $derived(asNumber(dbConnections.idle, 0));
+	const dbIdleTx = $derived(asNumber(dbConnections.idle_in_transaction, 0));
+	const dbWaitingLocks = $derived(asNumber(dbConnections.waiting_locks, 0));
+	const dbLongestQuery = $derived(asNumber(dbConnections.longest_query_seconds, 0));
+	const dbLongestTransaction = $derived(asNumber(dbConnections.longest_transaction_seconds, 0));
+	const dbCacheHit = $derived(asNumber(dbActivity.cache_hit_ratio, 0));
+	const dbCommits = $derived(asNumber(dbActivity.xact_commit, 0));
+	const dbRollbacks = $derived(asNumber(dbActivity.xact_rollback, 0));
+	const dbBlocksRead = $derived(asNumber(dbActivity.blks_read, 0));
+	const dbBlocksHit = $derived(asNumber(dbActivity.blks_hit, 0));
+	const dbTempBytes = $derived(asNumber(dbActivity.temp_bytes, 0));
+	const dbTempFiles = $derived(asNumber(dbActivity.temp_files, 0));
+	const dbDeadlocks = $derived(asNumber(dbActivity.deadlocks, 0));
+	const dbConflicts = $derived(asNumber(dbActivity.conflicts, 0));
+	const dbInserted = $derived(asNumber(dbActivity.tup_inserted, 0));
+	const dbUpdated = $derived(asNumber(dbActivity.tup_updated, 0));
+	const dbDeleted = $derived(asNumber(dbActivity.tup_deleted, 0));
+	const dbDeadTuples = $derived(asNumber(dbActivity.dead_tuples, 0));
+	const dbDeadRatio = $derived(asNumber(dbActivity.dead_ratio, 0));
+	const dbStatsReset = $derived(asString(dbActivity.stats_reset, ''));
+
+	function dbCacheStatus(value: number): 'ok' | 'warn' | 'critical' {
+		if (value >= 90) return 'ok';
+		if (value >= 80) return 'warn';
+		return 'critical';
+	}
+
+	function dbSetting(name: string): string {
+		const item = asObject(dbSettings[name]);
+		const setting = asString(item.setting, '—');
+		const unit = asString(item.unit, '');
+		return unit ? `${setting} ${unit}` : setting;
+	}
+
 	async function loadLogs() {
 		if (!logContainer) {
 			logError = 'Selecciona un contenedor.';
@@ -265,7 +323,13 @@
 
 	{#if !module.available}
 		<OfflineBanner
-			message="El agente no responde ahora mismo. Se muestra el último estado conocido; los valores pueden estar desactualizados."
+			message={module.id === 'database'
+				? 'La base de datos no responde ahora mismo. Se muestra el último estado conocido.'
+				: module.id === 'weather'
+					? 'No se pudieron cargar los datos meteorológicos. Se muestra el último estado conocido.'
+					: module.id === 'opencode'
+						? 'OpenCode no está disponible ahora mismo. Se muestra el último estado conocido.'
+						: 'El agente no responde ahora mismo. Se muestra el último estado conocido; los valores pueden estar desactualizados.'}
 		/>
 	{/if}
 
@@ -1287,6 +1351,12 @@
 						'\n'
 					)}{:else if logLoaded}Sin líneas de log.{:else}Selecciona un contenedor y pulsa «Ver logs».{/if}</pre>
 		</div>
+	{:else if module.id === 'database'}
+		<DatabaseDetail {detail} />
+	{:else if module.id === 'weather'}
+		<WeatherDetail {detail} />
+	{:else if module.id === 'opencode'}
+		<OpencodeDetail {detail} />
 	{:else}
 		<div class="rounded-brand-lg border border-line bg-surface p-6">
 			<p class="text-[14px] text-ink-2">

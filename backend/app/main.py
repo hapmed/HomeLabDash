@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.db.bootstrap import bootstrap_admin
 from app.db.session import get_session_factory
+from app.services.database_monitor import DatabaseMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,13 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             bootstrap_admin(session)
     except Exception:  # noqa: BLE001 - el arranque no debe caer si la BD tarda
         logger.exception("no se pudo inicializar el administrador (¿migraciones pendientes?)")
+
+    settings = get_settings()
+    database_monitor = DatabaseMonitor(settings)
+    if settings.database_monitor_enabled and settings.environment != "test":
+        database_monitor.start()
     yield
+    database_monitor.stop()
 
 
 def create_app() -> FastAPI:

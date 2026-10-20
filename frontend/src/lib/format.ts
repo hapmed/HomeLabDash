@@ -2,6 +2,17 @@ const GIB = 1024 ** 3;
 const MIB = 1024 ** 2;
 const TIB = 1024 ** 4;
 
+export function formatDate(value: string | null | undefined): string {
+	if (!value) return '—';
+	const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+	if (!year || !month || !day) return '—';
+	return new Intl.DateTimeFormat('es-ES', {
+		weekday: 'short',
+		day: 'numeric',
+		month: 'short'
+	}).format(new Date(year, month - 1, day));
+}
+
 export function formatBytes(bytes: number | null | undefined): string {
 	if (bytes === null || bytes === undefined || !Number.isFinite(bytes)) return '—';
 	if (bytes >= TIB) return `${(bytes / TIB).toFixed(2)} TB`;

@@ -22,6 +22,7 @@ os.environ.update(
         "AGENT_URL": "http://agent.invalid:8001",
         "AGENT_TOKEN": "test-agent-token",
         "RATE_LIMIT_ENABLED": "false",
+        "DATABASE_MONITOR_ENABLED": "false",
     }
 )
 
@@ -150,6 +151,39 @@ class FakeAgent:
                         "top_cpu": {"name": "postgres", "cpu_percent": 0.3},
                         "top_memory": {"name": "postgres", "memory_used": 104857600},
                         "sampled_at": "2026-10-19T12:00:00+00:00",
+                        "error": None,
+                    },
+                },
+                "weather": {
+                    "status": "ok",
+                    "summary": {
+                        "label": "Temperatura",
+                        "value": 24.5,
+                        "unit": "°C",
+                        "detail": "Parcialmente nublado · Humedad 60% · AQI 42",
+                    },
+                    "detail": {
+                        "current": {"temperature": 24.5, "humidity": 60},
+                        "rain": {"rained_today": False, "today_mm": 0},
+                        "air": {"us_aqi": 42, "category": "Buena"},
+                        "alerts": [],
+                    },
+                },
+                "opencode": {
+                    "status": "ok",
+                    "summary": {
+                        "label": "OpenCode",
+                        "value": "running",
+                        "detail": "CPU 2.0% · RAM 1.3 GB · up 4d",
+                    },
+                    "detail": {
+                        "container": {
+                            "name": "opencode",
+                            "state": "running",
+                            "cpu_percent": 2.0,
+                            "memory_used": 1312976896,
+                            "uptime_seconds": 345600,
+                        },
                         "error": None,
                     },
                 },

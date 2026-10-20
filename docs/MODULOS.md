@@ -4,8 +4,8 @@ Cada módulo es un widget del dashboard y una página de detalle en
 `/modulo/<id>`. El estado se calcula en el agente y se expone por la API.
 
 > **Estado:** implementados y desplegados `overview`, `cpu`, `memory`, `storage`,
-> `internet`, `devices` y `docker`. El resto está en el registro con
-> `enabled=false` hasta su fase.
+> `internet`, `devices`, `docker`, `database`, `weather` y `opencode`. El resto
+> está en el registro con `enabled=false` hasta su fase.
 
 ## Catálogo
 
@@ -19,7 +19,7 @@ Cada módulo es un widget del dashboard y una página de detalle en
 | `devices` | Dispositivos | Dispositivos en línea | Inventario, nombres, SSID, tasas, consumo diario/mensual e histórico | ARP del host + router AC12 | 1 |
 | `docker` | Docker | Contenedores activos / total | Lista, estado, CPU/RAM, red, disco y logs | Docker socket (ro) | 3 (implementado) |
 | `network` | Red | Tráfico actual | Interfaces, RX/TX, errores | `/proc/net/dev` | 3 |
-| `temperature` | Temperatura | Temperatura máxima | Sensores por zona | `/sys/class/thermal` | 3 |
+| `weather` | Clima | Temperatura actual | Lluvia, humedad, AQI, hourly y diario | Open-Meteo | 3 (implementado) |
 | `services` | Servicios | Servicios activos | Puertos, unidades, uptime | `systemctl`, sockets | 3 |
 | `cloudflare` | Cloudflare | Estado del túnel | Latencia, conexiones, hostnames | API/cloudflared | 4 |
 | `backups` | Backups | Último backup | Historial y resultado | job local | 4 |

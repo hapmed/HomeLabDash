@@ -44,6 +44,18 @@ def human_bytes(value: float | int | None) -> str:
     return f"{size:.1f} TB"
 
 
+def format_uptime(seconds: float | int | None) -> str:
+    total = int(seconds or 0)
+    days, rest = divmod(total, 86400)
+    hours, rest = divmod(rest, 3600)
+    minutes = rest // 60
+    if days:
+        return f"{days}d {hours}h {minutes}m"
+    if hours:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
 def parse_docker_time(value: str | None) -> datetime | None:
     if not value or value.startswith("0001-"):
         return None
@@ -357,6 +369,50 @@ class DockerMonitor:
         }
 
     # --- API -------------------------------------------------------------
+    def container_detail(self, name: str) -> dict[str, Any]:
+        client = self._ensure_client()
+        try:
+            container = client.containers.get(name)
+        except NotFound as exc:
+            raise DockerNotFoundError("contenedor no encontrado") from exc
+        except (DockerException, OSError) as exc:
+            raise DockerLogsError("docker no disponible") from exc
+
+        stats = self._safe_stats(container) if container.status == "running" else None
+        data = self._container_data(container, stats)
+        attrs = container.attrs or {}
+        config = attrs.get("Config") or {}
+        host = attrs.get("HostConfig") or {}
+        data["inspect"] = {
+            "image": config.get("Image"),
+            "image_id": attrs.get("Image"),
+            "command": config.get("Cmd"),
+            "entrypoint": config.get("Entrypoint"),
+            "working_dir": config.get("WorkingDir"),
+            "user": config.get("User"),
+            "restart_policy": (host.get("RestartPolicy") or {}).get("Name"),
+            "network_mode": host.get("NetworkMode"),
+            "mounts": [
+                {
+                    "type": mount.get("Type"),
+                    "source": mount.get("Source"),
+                    "destination": mount.get("Destination"),
+                    "mode": mount.get("Mode"),
+                    "rw": mount.get("RW"),
+                }
+                for mount in attrs.get("Mounts") or []
+            ],
+            "labels": config.get("Labels") or {},
+            "env_keys": sorted(
+                {
+                    item.split("=", 1)[0]
+                    for item in config.get("Env") or []
+                    if "=" in item
+                }
+            ),
+        }
+        return data
+
     def logs(self, container_id: str, tail: int = 100) -> dict[str, Any]:
         client = self._ensure_client()
         try:
