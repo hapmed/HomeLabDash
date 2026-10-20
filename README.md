@@ -45,7 +45,7 @@ agent FastAPI (solo lectura)           agent:8001
 | `docker` | Contenedores activos / total | CPU, RAM, red, disco, sistema y logs | Docker SDK (socket ro) |
 | `database` | Tamaño y conexiones | Tablas, índices, caché, actividad e histórico | PostgreSQL `pg_stat_*` |
 | `weather` | Temperatura actual | Lluvia, humedad, viento, UV, AQI, hourly y diario | Open-Meteo |
-| `opencode` | Estado del contenedor | Recursos, configuración, montajes y logs | Docker inspect + logs |
+| `opencode` | Estado del contenedor | Recursos, sesiones, proyectos, tokens, costos y logs | Docker inspect + API interna |
 
 El monitor de Docker usa el socket en **solo lectura** para listar contenedores y
 medir CPU, RAM, red, bloques, disco y logs; no inicia, detiene ni modifica nada.

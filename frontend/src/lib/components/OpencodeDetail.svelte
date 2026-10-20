@@ -10,6 +10,7 @@
 		formatPercent,
 		formatUptime
 	} from '#lib/format';
+	import OpencodeApp from './OpencodeApp.svelte';
 	import StatTile from './StatTile.svelte';
 
 	let { detail }: { detail: Record<string, unknown> } = $props();
@@ -22,6 +23,41 @@
 	const networks = $derived(asArray(container.networks).map((item) => asString(item, '')));
 	const containerState = $derived(asString(container.state, '—'));
 	const health = $derived(asString(container.health, ''));
+
+	const app = $derived(asObject(detail.app));
+	const appError = $derived(asString(detail.app_error, ''));
+	const info = $derived(asObject(app.info));
+	const stats = $derived(asObject(app.stats));
+	const projects = $derived(asArray(app.projects).map(asObject));
+	const sessions = $derived(asArray(app.sessions).map(asObject));
+	const active = $derived(asArray(app.active).map(asObject));
+	const defaultModel = $derived(asObject(app.default_model));
+	const agents = $derived(asArray(app.agents).map(asObject));
+	const location = $derived(asObject(app.location));
+	const activity = $derived(asArray(stats.activity).map(asObject));
+	const models = $derived(asArray(stats.models).map(asObject));
+	const tokens = $derived(asObject(stats.tokens));
+	const tools = $derived(asObject(stats.tools));
+	const maxActivity = $derived(Math.max(1, ...activity.map((item) => asNumber(item.steps, 0))));
+
+	function formatCompact(value: number): string {
+		return new Intl.NumberFormat('es-ES', {
+			notation: 'compact',
+			maximumFractionDigits: 1
+		}).format(value);
+	}
+
+	function formatEpoch(value: unknown): string {
+		const milliseconds = asOptionalNumber(value);
+		return milliseconds ? formatDateTime(new Date(milliseconds)) : '—';
+	}
+
+	function modelName(value: unknown): string {
+		const model = asObject(value);
+		const id = asString(model.id, '—');
+		const provider = asString(model.provider, '');
+		return provider ? `${id} · ${provider}` : id;
+	}
 
 	let logLines = $state<string[]>([]);
 	let logLoading = $state(false);
@@ -154,6 +190,8 @@
 		</dl>
 	</div>
 </div>
+
+<OpencodeApp {detail} />
 
 <div class="rounded-brand-lg border border-line bg-surface p-5">
 	<h2 class="text-[17px] font-semibold text-ink">Montajes</h2>

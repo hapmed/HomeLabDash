@@ -107,8 +107,10 @@ job periódico guarda snapshots agregados.
 - El módulo `internet` mantiene su propio hilo en el agente: conectividad cada
   minuto, IP pública cada 15 min y test de velocidad cada hora. El histórico se
   persiste en el volumen `agent-data` (`/data/internet-history.json`).
-- El módulo `opencode` inspecciona su contenedor por el socket Docker (recursos,
-montajes, configuración y logs). El módulo de clima usa Open-Meteo (sin clave) y guarda un histórico diario en
+- El módulo `opencode` inspecciona su contenedor por el socket Docker y consulta su
+API interna (Basic auth) a través de la red `opencode_default`: estadísticas
+agregadas, proyectos, sesiones, modelos, tokens y costos. No lee mensajes ni
+prompts. El módulo de clima usa Open-Meteo (sin clave) y guarda un histórico diario en
 `/data/weather-history.json`; el de base de datos consulta `pg_stat_*` de
 `homelabdash` y guarda snapshots en `module_snapshots` cada 5 minutos.
 

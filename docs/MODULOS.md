@@ -20,6 +20,7 @@ Cada módulo es un widget del dashboard y una página de detalle en
 | `docker` | Docker | Contenedores activos / total | Lista, estado, CPU/RAM, red, disco y logs | Docker socket (ro) | 3 (implementado) |
 | `network` | Red | Tráfico actual | Interfaces, RX/TX, errores | `/proc/net/dev` | 3 |
 | `weather` | Clima | Temperatura actual | Lluvia, humedad, AQI, hourly y diario | Open-Meteo | 3 (implementado) |
+| `opencode` | OpenCode | Estado del contenedor | Sesiones, proyectos, tokens, costo, modelos y logs | Docker + API interna | 4 (implementado) |
 | `services` | Servicios | Servicios activos | Puertos, unidades, uptime | `systemctl`, sockets | 3 |
 | `cloudflare` | Cloudflare | Estado del túnel | Latencia, conexiones, hostnames | API/cloudflared | 4 |
 | `backups` | Backups | Último backup | Historial y resultado | job local | 4 |

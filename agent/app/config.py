@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     # Módulo dedicado de OpenCode (usa el socket Docker).
     opencode_enabled: bool = True
     opencode_container: str = "opencode"
+    opencode_api_url: str = "http://opencode:4096"
+    opencode_api_username: str = "opencode"
+    opencode_api_password: str = ""
+    opencode_app_poll_seconds: int = 60
+    opencode_session_limit: int = 100
 
     @property
     def procfs(self) -> str:

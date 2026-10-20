@@ -27,6 +27,7 @@ services:
     networks:
       - internal
       - egress
+      - opencode_default
     read_only: true
     tmpfs:
       - /tmp
@@ -135,5 +136,7 @@ networks:
   # `egress`: solo el agente, para poder medir Internet sin exponerlo al frontend.
   egress:
     driver: bridge
+  opencode_default:
+    external: true
   apps-net:
     external: true

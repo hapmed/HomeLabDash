@@ -1,11 +1,13 @@
 """Arranque y rutas del agente (solo lectura, token interno)."""
 
 import secrets
+import threading
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 
@@ -20,6 +22,7 @@ from app.docker_monitor import (
 from app.internet import InternetMonitor
 from app.metrics import HostMetrics
 from app.network import NetworkMonitor
+from app.opencode_app import OpenCodeClient, OpenCodeError
 from app.weather import WeatherMonitor
 
 
@@ -48,6 +51,52 @@ def get_weather_monitor() -> WeatherMonitor:
     return WeatherMonitor(get_settings())
 
 
+@lru_cache
+def get_opencode_client() -> OpenCodeClient:
+    settings = get_settings()
+    return OpenCodeClient(
+        base_url=settings.opencode_api_url,
+        username=settings.opencode_api_username,
+        password=settings.opencode_api_password,
+        timezone=settings.weather_timezone,
+        session_limit=settings.opencode_session_limit,
+    )
+
+
+_opencode_lock = threading.Lock()
+_opencode_cache: dict[str, Any] | None = None
+_opencode_cache_at = 0.0
+_opencode_error: str | None = None
+
+
+def _opencode_app() -> tuple[dict[str, Any] | None, str | None]:
+    global _opencode_cache, _opencode_cache_at, _opencode_error
+
+    settings = get_settings()
+    if not settings.opencode_api_password:
+        return None, None
+
+    with _opencode_lock:
+        if (
+            _opencode_cache is not None
+            and time.monotonic() - _opencode_cache_at < settings.opencode_app_poll_seconds
+        ):
+            return _opencode_cache, _opencode_error
+
+    try:
+        data = get_opencode_client().fetch_app()
+    except OpenCodeError as exc:
+        with _opencode_lock:
+            _opencode_error = str(exc)
+            return _opencode_cache, _opencode_error
+
+    with _opencode_lock:
+        _opencode_cache = data
+        _opencode_cache_at = time.monotonic()
+        _opencode_error = None
+    return data, None
+
+
 def opencode_payload() -> dict[str, object]:
     settings = get_settings()
     if not settings.opencode_enabled:
@@ -60,6 +109,9 @@ def opencode_payload() -> dict[str, object]:
             },
             "detail": {"error": "deshabilitado"},
         }
+
+    app_data, app_error = _opencode_app()
+
     try:
         container = get_docker_monitor().container_detail(settings.opencode_container)
     except DockerNotFoundError:
@@ -70,7 +122,11 @@ def opencode_payload() -> dict[str, object]:
                 "value": "—",
                 "detail": "Contenedor no encontrado",
             },
-            "detail": {"error": "contenedor no encontrado"},
+            "detail": {
+                "error": "contenedor no encontrado",
+                "app": app_data,
+                "app_error": app_error,
+            },
         }
     except DockerLogsError:
         return {
@@ -80,7 +136,7 @@ def opencode_payload() -> dict[str, object]:
                 "value": "—",
                 "detail": "Docker no disponible",
             },
-            "detail": {"error": "docker no disponible"},
+            "detail": {"error": "docker no disponible", "app": app_data, "app_error": app_error},
         }
 
     state = str(container.get("state") or "unknown")
@@ -89,16 +145,40 @@ def opencode_payload() -> dict[str, object]:
     cpu = float(container.get("cpu_percent", 0) or 0)
     memory = int(container.get("memory_used", 0) or 0)
     uptime = int(container.get("uptime_seconds", 0) or 0)
+
+    detail_parts = [
+        f"CPU {cpu:.1f}%",
+        f"RAM {human_bytes(memory)}",
+        f"up {format_uptime(uptime)}",
+    ]
+    stats = (app_data or {}).get("stats") or {}
+    if isinstance(stats, dict):
+        sessions = stats.get("sessions")
+        cost = stats.get("cost")
+        if sessions:
+            detail_parts.append(f"{sessions} sesiones")
+        if cost:
+            detail_parts.append(f"${float(cost):.2f}")
+
+    status_value = "ok"
+    if not state_ok:
+        status_value = "warn"
+    elif app_error:
+        status_value = "warn"
+
     return {
-        "status": "ok" if state_ok else "warn",
+        "status": status_value,
         "summary": {
             "label": "OpenCode",
             "value": state,
-            "detail": (
-                f"CPU {cpu:.1f}% · RAM {human_bytes(memory)} · up {format_uptime(uptime)}"
-            ),
+            "detail": " · ".join(detail_parts),
         },
-        "detail": {"container": container, "error": None},
+        "detail": {
+            "container": container,
+            "app": app_data,
+            "app_error": app_error,
+            "error": None if state_ok else f"contenedor en estado {state}",
+        },
     }
 
 
